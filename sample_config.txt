@@ -1,0 +1,6 @@
+SRTF;3
+T1;red;0;5;2;
+T2;blue;0;2;3;
+T3;green;1;4;1;
+T4;orange;3;1;4;
+T5;purple;5;2;5;
