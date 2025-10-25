@@ -19,9 +19,12 @@ class Simulator:
     def run(self):
         print(f"Iniciando simulação com algoritmo: {self.scheduler.__name__}")
         while not self.all_tasks_completed() and self.time < self.tick_limit:
-            self._check_arrivals()
-            self._schedule()
+            self._check_arrivals()  
+            self._schedule()        
             self._tick()
+            
+            if self.scheduler.__name__ == "priority_scheduler":
+                self.apply_aging()
             self.time += 1
         print("Simulação encerrada.")
         render_gantt_terminal(self.timeline)
@@ -44,7 +47,11 @@ class Simulator:
 
         self._check_arrivals()  
         self._schedule()        
-        self._tick()            
+        self._tick()
+
+        if self.scheduler.__name__ == "priority_scheduler":
+            self.apply_aging()  
+
         print(f"[Tick {self.time}] Executando: {self.running_task.id if self.running_task else 'IDLE'}")
         self.time += 1  
         render_gantt_terminal(self.timeline)
@@ -60,19 +67,39 @@ class Simulator:
     def _schedule(self):
         if not self.running_task or self.running_task.remaining_time <= 0:
             self.running_task = self.scheduler(self.ready_queue)
+            if self.running_task:
+                self.running_task.executed_quantum = 0
+
+    def apply_aging(self):
+        for task in self.ready_queue:
+            if task != self.running_task and not task.completed:
+                task.priority += 1 
+
 
     def _tick(self):
         if self.running_task:
             self.running_task.remaining_time -= 1
             self.running_task.executed_ticks += 1
+            self.running_task.executed_quantum += 1
+            self.running_task.priority = self.running_task.priority_default
             self.timeline.append(self.running_task.id)
+
             if self.running_task.remaining_time <= 0:
                 self.running_task.completed = True
                 self.ready_queue.remove(self.running_task)
                 print(f"Tarefa {self.running_task.id} concluída em t={self.time}")
                 self.running_task = None
+
+            elif self.running_task.executed_quantum >= self.quantum:
+                # Quantum expirou: preempção
+                print(f"Tarefa {self.running_task.id} preemptada em t={self.time}")
+                self.ready_queue.append(self.running_task)
+                self.ready_queue.remove(self.running_task)
+                self.running_task.executed_quantum = 0
+                self.running_task = None
         else:
             self.timeline.append("IDLE")
+
 
     def all_tasks_completed(self):
         return all(task.completed for task in self.tasks)

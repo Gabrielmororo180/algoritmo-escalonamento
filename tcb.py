@@ -4,7 +4,10 @@ class TaskControlBlock:
         self.color = color
         self.arrival = arrival
         self.duration = duration
+
         self.priority = priority
+        self.priority_default = priority
+        
         self.events = events
 
         self.remaining_time = duration

@@ -5,7 +5,7 @@ def srtf_scheduler(ready_queue):
     return min(ready_queue, key=lambda t: t.remaining_time, default=None)
 
 def priority_scheduler(ready_queue):
-    return min(ready_queue, key=lambda t: t.priority, default=None)
+    return max(ready_queue, key=lambda t: t.priority, default=None)
 
 def get_scheduler(algorithm):
     if algorithm.upper() == "FIFO":

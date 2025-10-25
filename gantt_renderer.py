@@ -39,6 +39,8 @@ def render_gantt_image(timeline, filename="gantt.png"):
         y1 = y0 + cell_height
         canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="black")
         canvas.create_text((x0 + x1) // 2, (y0 + y1) // 2, text=task_id[:2], font=("Arial", 10, "bold"))
+        canvas.create_text(x0, y1 +20, text=str(i), font=("Arial", 8))
+
 
     # Atualiza a interface antes de salvar
     canvas.update()
