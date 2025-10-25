@@ -23,8 +23,6 @@ class Simulator:
             self._schedule()        
             self._tick()
             
-            if self.scheduler.__name__ == "priority_scheduler":
-                self.apply_aging()
             self.time += 1
         print("Simulação encerrada.")
         render_gantt_terminal(self.timeline)
@@ -49,8 +47,6 @@ class Simulator:
         self._schedule()        
         self._tick()
 
-        if self.scheduler.__name__ == "priority_scheduler":
-            self.apply_aging()  
 
         print(f"[Tick {self.time}] Executando: {self.running_task.id if self.running_task else 'IDLE'}")
         self.time += 1  
@@ -81,7 +77,6 @@ class Simulator:
             self.running_task.remaining_time -= 1
             self.running_task.executed_ticks += 1
             self.running_task.executed_quantum += 1
-            self.running_task.priority = self.running_task.priority_default
             self.timeline.append(self.running_task.id)
 
             if self.running_task.remaining_time <= 0:
