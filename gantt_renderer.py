@@ -1,3 +1,7 @@
+from fileinput import filename
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
 def render_gantt_terminal(timeline):
     print("\nGráfico de Gantt (terminal):\n")
     header = ""
@@ -9,55 +13,84 @@ def render_gantt_terminal(timeline):
     print(values)
 
 
-def render_gantt_image(timeline, filename="gantt.png"):
-    import tkinter as tk
+def render_gantt_image(timeline, arrivals=None, finishes=None, filename="gantt.png"):
+    """
+    timeline: lista com a tarefa executada em cada unidade de tempo
+              Ex: ["T1","T1","T2", None, "T3", ...]  (pode usar None se CPU ociosa)
+    arrivals: opcional dict {"T1": t_arrival, ...}
+    finishes: opcional dict {"T1": t_finish, ...} (t_finish é exclusivo: intervalo [arrival, finish))
+    """
 
-    cell_width = 40
-    cell_height = 40
-    width = len(timeline) * cell_width
-    height = cell_height + 40
+    total_time = len(timeline)
+    # tarefas únicas ignorando None
+    tasks = sorted({t for t in timeline if t is not None})
 
-    root = tk.Tk()
-    root.title("Gráfico de Gantt")
-    canvas = tk.Canvas(root, width=width, height=height, bg="white")
-    canvas.pack()
+    # calcula arrivals/finishes se não fornecidos
+    if arrivals is None or finishes is None:
+        arrivals = {} if arrivals is None else dict(arrivals)
+        finishes = {} if finishes is None else dict(finishes)
+        for task in tasks:
+            # primeiro índice onde aparece
+            if task not in arrivals:
+                for i, cur in enumerate(timeline):
+                    if cur == task:
+                        arrivals[task] = i
+                        break
+            # último índice onde aparece -> finish = last_index + 1
+            if task not in finishes:
+                last = None
+                for i in range(total_time - 1, -1, -1):
+                    if timeline[i] == task:
+                        last = i
+                        break
+                finishes[task] = (last + 1) if last is not None else arrivals.get(task, 0)
 
-    # Paleta para cores diferentes se não quiser usar as reais
-    palette = ["red", "blue", "green", "orange", "purple", "cyan", "yellow", "gray"]
-    colors = {}
+    fig, ax = plt.subplots(figsize=(10, 0.8 * max(3, len(tasks))))
+    colors = plt.cm.tab10.colors
+    for i, task in enumerate(tasks):
+        y_pos = i - 0.4
+        start_time = arrivals.get(task, 0)
+        end_time = finishes.get(task, total_time)
+        life_duration = max(0, end_time - start_time)
 
-    for i, task_id in enumerate(timeline):
-        color = "lightgray"
-        if task_id != "IDLE":
-            if task_id not in colors:
-                colors[task_id] = palette[len(colors) % len(palette)]
-            color = colors[task_id]
+        # 1) retângulo de vida da tarefa: branco com borda preta
+        ax.broken_barh([(start_time, life_duration)], (y_pos, 0.8),
+                       facecolors="white", edgecolors="black", linewidth=1.2)
 
-        x0 = i * cell_width
-        y0 = 0
-        x1 = x0 + cell_width
-        y1 = y0 + cell_height
-        canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="black")
-        canvas.create_text((x0 + x1) // 2, (y0 + y1) // 2, text=task_id[:2], font=("Arial", 10, "bold"))
-        canvas.create_text(x0, y1 +20, text=str(i), font=("Arial", 8))
+        # 2) encontrar intervalos de execução dentro da timeline
+        intervals = []
+        s = None
+        for t, cur in enumerate(timeline):
+            if cur == task:
+                if s is None:
+                    s = t
+            else:
+                if s is not None:
+                    intervals.append((s, t - s))
+                    s = None
+        if s is not None:
+            intervals.append((s, total_time - s))
 
+        # 3) pintar intervalos de execução (somente se estiverem dentro da vida)
+        color = colors[i % len(colors)]
+        for st, dur in intervals:
+            # recorta para que não ultrapasse [start_time, end_time)
+            seg_start = max(st, start_time)
+            seg_end = min(st + dur, end_time)
+            seg_dur = seg_end - seg_start
+            if seg_dur > 0:
+                ax.broken_barh([(seg_start, seg_dur)], (y_pos, 0.8),
+                               facecolors=color, edgecolors="black", linewidth=1.2)
 
-    # Atualiza a interface antes de salvar
-    canvas.update()
-
-    # Exporta como .ps
-    ps_file = "gantt_output.eps"
-    canvas.postscript(file=ps_file)
-
-    # Converte EPS para PNG (se Pillow estiver disponível)
-    try:
-        from PIL import Image
-        img = Image.open(ps_file)
-        img.save(filename, "PNG")
-        print(f"\nImagem salva como {filename}")
-    except ImportError:
-        print(f"\n[INFO] Pillow não instalado. EPS salvo como: {ps_file}")
-        print("Para PNG, instale com: pip install Pillow")
-
-    # Mantém a janela aberta até fechar manualmente
-    root.mainloop()
+    # ajustes visuais
+    ax.set_xlabel("Tempo (t)")
+    ax.set_ylabel("Tarefas")
+    ax.set_yticks(range(len(tasks)))
+    ax.set_yticklabels(tasks)
+    ax.set_xticks(range(total_time + 1))
+    ax.grid(True, axis='x', linestyle=':', alpha=0.5)
+    ax.invert_yaxis()
+    plt.title("Gráfico de Gantt")
+    plt.tight_layout()
+    plt.savefig(filename, format="png", dpi=300)
+    plt.show()
