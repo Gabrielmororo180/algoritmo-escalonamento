@@ -1,8 +1,6 @@
-from fileinput import filename
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
-def render_gantt_terminal(timeline):
+def render_gantt_terminal(timeline, wait_map=None):
     print("\nGráfico de Gantt (terminal):\n")
     header = ""
     values = ""
@@ -11,9 +9,13 @@ def render_gantt_terminal(timeline):
         values += f"{tick:^5}"
     print(header)
     print(values)
+    if wait_map:
+        print("\nTempos de espera (ticks):")
+        for tid, ticks in wait_map.items():
+            print(f"{tid}: {len(ticks)} ticks -> {ticks}")
 
 
-def render_gantt_image(timeline, arrivals=None, finishes=None, filename="gantt.png"):
+def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, filename="gantt.png"):
     """
     timeline: lista com a tarefa executada em cada unidade de tempo
               Ex: ["T1","T1","T2", None, "T3", ...]  (pode usar None se CPU ociosa)
@@ -23,9 +25,9 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, filename="gantt.p
 
     total_time = len(timeline)
     # tarefas únicas ignorando None
-    tasks = sorted({t for t in timeline if t is not None})
+    tasks = sorted({t for t in timeline if t is not None and t != 'IDLE'})
 
-    # calcula arrivals/finishes se não fornecidos
+    # calcula arrivals/finishes se não fornecidos (se chegarem do simulador, usa direto)
     if arrivals is None or finishes is None:
         arrivals = {} if arrivals is None else dict(arrivals)
         finishes = {} if finishes is None else dict(finishes)
@@ -53,11 +55,11 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, filename="gantt.p
         end_time = finishes.get(task, total_time)
         life_duration = max(0, end_time - start_time)
 
-        # 1) retângulo de vida da tarefa: branco com borda preta
+        # Vida total como contorno apenas (sem preenchimento) para referência
         ax.broken_barh([(start_time, life_duration)], (y_pos, 0.8),
-                       facecolors="white", edgecolors="black", linewidth=1.2)
+                       facecolors="none", edgecolors="black", linewidth=1.2)
 
-        # 2) encontrar intervalos de execução dentro da timeline
+        # Intervalos de execução
         intervals = []
         s = None
         for t, cur in enumerate(timeline):
@@ -82,6 +84,39 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, filename="gantt.p
                 ax.broken_barh([(seg_start, seg_dur)], (y_pos, 0.8),
                                facecolors=color, edgecolors="black", linewidth=1.2)
 
+        # Ticks de espera: inclui todos os ticks entre arrival e end que não estão em execução
+        waiting_ticks = set()
+        if wait_map and task in wait_map:
+            waiting_ticks.update(wait_map[task])
+        # Inclui também ticks antes da primeira execução se a tarefa chegou e não executou ainda
+        # Constrói conjunto execução para rapidez
+        exec_ticks = set()
+        for st, dur in intervals:
+            for tt in range(st, st + dur):
+                exec_ticks.add(tt)
+        for tt in range(start_time, end_time):
+            if tt not in exec_ticks:
+                waiting_ticks.add(tt)
+
+        # Agrupa ticks contíguos
+        wait_intervals = []
+        ws = None
+        for t in range(start_time, end_time):
+            if t in waiting_ticks and t not in exec_ticks:
+                if ws is None:
+                    ws = t
+            else:
+                if ws is not None:
+                    wait_intervals.append((ws, t - ws))
+                    ws = None
+        if ws is not None:
+            wait_intervals.append((ws, end_time - ws))
+
+        for st, dur in wait_intervals:
+            if dur > 0:
+                ax.broken_barh([(st, dur)], (y_pos, 0.8),
+                               facecolors="white", edgecolors="black", linewidth=0.8, hatch=None)
+
     # ajustes visuais
     ax.set_xlabel("Tempo (t)")
     ax.set_ylabel("Tarefas")
@@ -90,7 +125,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, filename="gantt.p
     ax.set_xticks(range(total_time + 1))
     ax.grid(True, axis='x', linestyle=':', alpha=0.5)
     ax.invert_yaxis()
-    plt.title("Gráfico de Gantt")
+    plt.title("Gráfico de Gantt (execução vs espera)")
     plt.tight_layout()
     plt.savefig(filename, format="png", dpi=300)
     plt.show()
