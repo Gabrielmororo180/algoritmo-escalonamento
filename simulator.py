@@ -82,27 +82,21 @@ class Simulator:
                     self.ready_queue.remove(self.running_task)
             return
 
-        # Preempção imediata para algoritmos preemptivos (ex: SRTF)
+        # Preempção imediata delegada ao scheduler (should_preempt)
         if getattr(self.scheduler, 'preemptive', False):
             candidate = self.scheduler(self.ready_queue)
             if candidate and candidate is not self.running_task:
-                do_switch = False
-                # Regra SRTF: menor remaining_time
-                if hasattr(self.scheduler, 'preemptive') and getattr(self.scheduler, 'ignore_quantum', False) and not getattr(self.scheduler, 'priority_preemptive', False):
-                    if candidate.remaining_time < self.running_task.remaining_time:
-                        do_switch = True
-                # Regra PRIOP: maior prioridade preempta imediatamente
-                if getattr(self.scheduler, 'priority_preemptive', False):
-                    if candidate.priority > self.running_task.priority:
-                        do_switch = True
-                if do_switch:
+                should_switch = False
+                if hasattr(self.scheduler, 'should_preempt'):
+                    should_switch = self.scheduler.should_preempt(self.running_task, candidate)
+                if should_switch:
                     if self.running_task not in self.ready_queue and not self.running_task.completed:
                         self.ready_queue.append(self.running_task)
                     self.running_task.executed_quantum = 0
-                    self.running_task = candidate
+                    # Remover candidata da fila e promover
                     if candidate in self.ready_queue:
-                        self.running_task.executed_quantum = 0
                         self.ready_queue.remove(candidate)
+                    self.running_task = candidate
 
     def apply_aging(self):
         for task in self.ready_queue:

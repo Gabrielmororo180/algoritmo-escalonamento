@@ -13,13 +13,14 @@ def srtf_scheduler(ready_queue):
     return min(ready_queue, key=lambda t: t.remaining_time, default=None)
 srtf_scheduler.preemptive = True
 srtf_scheduler.ignore_quantum = True  # SRTF decide por menor tempo restante, não por quantum
+srtf_scheduler.should_preempt = lambda current, candidate: candidate and current and candidate.remaining_time < current.remaining_time
 
 def priority_preemptive_scheduler(ready_queue):
-    # Mesmo critério, mas marcado como preemptivo
     return max(ready_queue, key=lambda t: t.priority, default=None)
 priority_preemptive_scheduler.preemptive = True
 priority_preemptive_scheduler.ignore_quantum = True
 priority_preemptive_scheduler.priority_preemptive = True
+priority_preemptive_scheduler.should_preempt = lambda current, candidate: candidate and current and candidate.priority > current.priority
 
 def get_scheduler(algorithm):
     if algorithm.upper() == "FIFO":
