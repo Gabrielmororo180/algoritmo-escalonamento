@@ -63,6 +63,60 @@ Gerando template:
 python main.py --gen-template --tasks 7
 ```
 
+### Modo Debug / Inspeção de Estado
+O modo debug permite avançar a simulação tick a tick e inspecionar o estado completo de cada tarefa.
+
+Atualmente há duas formas de usar o debug:
+
+1. Pela interface gráfica (recomendado):
+	 - Execute `python interface.py`.
+	 - Configure algoritmo e quantum.
+	 - Insira tarefas ou carregue `sample_config.txt`.
+	 - Clique em `Debug` para iniciar o modo passo-a-passo.
+	 - Use `Próximo Tick` para avançar. A janela inferior mostra:
+		 * Tick atual
+		 * Tarefa em execução
+		 * Fila de prontos
+		 * Tabela por tarefa (arrival, duração, restante, prioridade, ticks executados, total de espera, se está esperando agora, se completou)
+		 * Recorte dos últimos ticks da timeline
+
+2. Via código (programaticamente):
+	 ```python
+	 from config_loader import load_config
+	 from simulator import Simulator
+
+	 cfg = load_config('sample_config.txt')
+	 sim = Simulator(cfg)
+	 sim.run_debug()  # prepara estado para debug
+	 while sim.step():
+			 snap = sim.snapshot()  # dicionário com todo o estado
+			 # opcional: imprimir ou analisar snap
+	 ```
+
+Em modo debug, cada chamada a `step()`:
+* Processa chegadas, escalonamento e um tick de execução.
+* Permite coletar métricas incrementais.
+
+Campos do snapshot retornado:
+```json
+{
+	"time": <int>,
+	"running": <id ou null>,
+	"ready_queue": [<ids>],
+	"tasks": [
+		{"id": "T1", "arrival": 0, "duration": 5, "remaining": 2,
+		 "priority": 3, "completed": false, "executed_ticks": 3,
+		 "waited_ticks": 1, "waiting_now": false}
+	],
+	"wait_map": {"T1": [1,4]},
+	"timeline": ["T1","T1","T2",null,...],
+	"algorithm": "fifo_scheduler",
+	"quantum": 3
+}
+```
+
+Planejado (futuro): flag `--debug` na CLI para execução interativa sem GUI.
+
 ### Interface Gráfica (Tkinter)
 Execute:
 ```

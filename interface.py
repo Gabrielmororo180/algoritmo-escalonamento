@@ -268,6 +268,16 @@ class TaskEditorApp:
             config = load_config("sample_config.txt")
             self.simulator = Simulator(config)
             self.simulator.run_debug()
+            # Cria/limpa painel de estado se ainda não existir
+            if not hasattr(self, 'debug_frame'):
+                self.debug_frame = tk.Frame(self.root, bd=2, relief='groove')
+                self.debug_frame.grid(row=9, column=0, columnspan=5, sticky='we', pady=5)
+                tk.Label(self.debug_frame, text='Estado Debug (snapshot)').grid(row=0, column=0, sticky='w')
+                self.debug_text = tk.Text(self.debug_frame, height=12, width=80, font=('Consolas', 9))
+                self.debug_text.grid(row=1, column=0, sticky='we')
+            else:
+                self.debug_text.delete('1.0', tk.END)
+            self.update_debug_snapshot()
 
             messagebox.showinfo("Modo Debug", " Clique em 'Próximo Tick' para continuar.")
         except Exception as e:
@@ -280,9 +290,32 @@ class TaskEditorApp:
             return
 
         tick_result = self.simulator.step()
+        self.update_debug_snapshot()
 
         if not tick_result:
             messagebox.showinfo("Fim", "Todas as tarefas foram finalizadas.")
+
+    def update_debug_snapshot(self):
+        """Renderiza snapshot detalhado do simulador no painel de debug."""
+        if not hasattr(self, 'simulator') or not hasattr(self, 'debug_text'):
+            return
+        snap = self.simulator.snapshot()
+        lines = []
+        lines.append(f"Tick atual: {snap['time']}")
+        lines.append(f"Algoritmo: {snap['algorithm']} | Quantum: {snap['quantum']}")
+        lines.append(f"Rodando: {snap['running']}")
+        lines.append(f"Fila de Prontos: {', '.join(snap['ready_queue']) if snap['ready_queue'] else '(vazia)'}")
+        lines.append("\nTarefas:")
+        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4}"
+        lines.append(header)
+        lines.append('-' * len(header))
+        for t in snap['tasks']:
+            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4}")
+        lines.append("\nTimeline (últimos 30 ticks):")
+        last30 = snap['timeline'][-30:]
+        lines.append(' '.join([str(x) if x is not None else '-' for x in last30]))
+        self.debug_text.delete('1.0', tk.END)
+        self.debug_text.insert(tk.END, '\n'.join(lines))
 
 
 if __name__ == "__main__":

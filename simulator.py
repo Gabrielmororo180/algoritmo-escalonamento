@@ -51,6 +51,10 @@ class Simulator:
         self.wait_map = {}
         self.arrivals_map = {}
         self.finish_map = {}
+        # Flag interna para habilitar verbosidade adicional em modo debug
+        self.debug_mode = False
+        # Mapa de cores definidas por tarefa (id -> cor configurada)
+        self.task_colors = {t.id: t.color for t in self.tasks}
 
     def run(self):
         """Executa a simulação completa até todas as tarefas finalizarem
@@ -65,8 +69,8 @@ class Simulator:
             self.time += 1
         print("Simulação encerrada.")
         render_gantt_terminal(self.timeline)
-        # Passa mapas completos para renderer (espera, chegada, fim)
-        render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map)
+        # Passa mapas completos + cores definidas pelo usuário
+        render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
 
     def run_debug(self):
         """Reinicia estado interno para modo passo-a-passo.
@@ -83,6 +87,45 @@ class Simulator:
             task.remaining_time = task.duration
             task.completed = False
             task.executed_ticks = 0
+        self.debug_mode = True
+
+    def snapshot(self):
+        """Retorna um dicionário imutável com o estado corrente do sistema.
+
+        Campos principais:
+        - time: tick atual
+        - running: id da tarefa em execução ou None
+        - ready_queue: lista de ids das tarefas prontas
+        - tasks: lista de dicts por tarefa (id, arrival, duration, remaining, priority,
+                 completed, waited_ticks, executed_ticks)
+        - wait_map: mapa de ticks de espera (cópia superficial)
+        - timeline: cópia da linha do tempo até agora
+        - algorithm: nome do algoritmo ativo
+        - quantum: valor configurado
+        """
+        task_states = []
+        for t in self.tasks:
+            task_states.append({
+                "id": t.id,
+                "arrival": t.arrival,
+                "duration": t.duration,
+                "remaining": t.remaining_time,
+                "priority": t.priority,
+                "completed": t.completed,
+                "executed_ticks": t.executed_ticks,
+                "waited_ticks": len(self.wait_map.get(t.id, [])),
+                "waiting_now": (t in self.ready_queue and t is not self.running_task and not t.completed)
+            })
+        return {
+            "time": self.time,
+            "running": self.running_task.id if self.running_task else None,
+            "ready_queue": [t.id for t in self.ready_queue],
+            "tasks": task_states,
+            "wait_map": {k: list(v) for k, v in self.wait_map.items()},
+            "timeline": list(self.timeline),
+            "algorithm": self.scheduler.__name__,
+            "quantum": self.quantum
+        }
 
     def step(self):
         """Executa um único tick da simulação em modo debug.
@@ -94,13 +137,17 @@ class Simulator:
         self._check_arrivals()  
         self._schedule()        
         self._tick()
-
-
-        print(f"[Tick {self.time}] Executando: {self.running_task.id if self.running_task else 'IDLE'}")
-        self.time += 1  
-        render_gantt_terminal(self.timeline)
-        render_gantt_image(self.timeline)         
-        return True              
+        if self.debug_mode:
+            snap = self.snapshot()
+            print(f"[Tick {self.time}] EXEC: {snap['running']} | READY: {snap['ready_queue']} | QUANTUM={self.quantum}")
+            for ts in snap['tasks']:
+                print(f"  - {ts['id']}: rem={ts['remaining']} dur={ts['duration']} prio={ts['priority']} waited={ts['waited_ticks']} completed={ts['completed']} waiting_now={ts['waiting_now']}")
+            # Atualização incremental: evita gerar várias figuras
+            render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map)
+        else:
+            render_gantt_terminal(self.timeline)
+        self.time += 1
+        return True
 
 
     def _check_arrivals(self):

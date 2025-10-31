@@ -8,17 +8,27 @@ Decisões chave:
 1. Usar lista `timeline` indexada por tick simplifica reconstrução de intervalos.
 2. Calcular intervalos de execução por varredura linear evita armazenar estruturas extras.
 3. Espera é derivada: todos os ticks entre arrival e finish que não pertencem a execução.
-4. Uso de cores do colormap tab10 garante distinção consistente.
+4. Atualização incremental usa `plt.pause(0.001)` para manter responsividade.
 """
 
 import matplotlib.pyplot as plt
 
+# Objetos globais para renderização incremental
+_LIVE_FIG = None
+_LIVE_AX = None
+_LIVE_LAST_LEN = 0
+
 def render_gantt_terminal(timeline, wait_map=None):
+    """Renderização simples em texto da linha do tempo.
+
+    Usa '---' para ticks ociosos (None) para evitar exceção ao fatiar.
+    """
     print("\nGráfico de Gantt (terminal):\n")
     header = ""
     values = ""
     for tick, task_id in enumerate(timeline):
-        header += f"{task_id[:3]:^5}"
+        label = (task_id[:3] if isinstance(task_id, str) else '---')
+        header += f"{label:^5}"
         values += f"{tick:^5}"
     print(header)
     print(values)
@@ -28,7 +38,7 @@ def render_gantt_terminal(timeline, wait_map=None):
             print(f"{tid}: {len(ticks)} ticks -> {ticks}")
 
 
-def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, filename="gantt.png"):
+def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, task_colors=None, filename="gantt.png"):
     """
     timeline: lista com a tarefa executada em cada unidade de tempo
               Ex: ["T1","T1","T2", None, "T3", ...]  (pode usar None se CPU ociosa)
