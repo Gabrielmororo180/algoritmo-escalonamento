@@ -19,7 +19,7 @@ Decisões de design:
 
 from tcb import TaskControlBlock
 from scheduler import get_scheduler
-from gantt_renderer import render_gantt_terminal, render_gantt_image
+from gantt_renderer import render_gantt_terminal, render_gantt_image, render_gantt_live
 
 class Simulator:
     def __init__(self, config):
@@ -143,7 +143,7 @@ class Simulator:
             for ts in snap['tasks']:
                 print(f"  - {ts['id']}: rem={ts['remaining']} dur={ts['duration']} prio={ts['priority']} waited={ts['waited_ticks']} completed={ts['completed']} waiting_now={ts['waiting_now']}")
             # Atualização incremental: evita gerar várias figuras
-            render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map)
+            render_gantt_live(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
         else:
             render_gantt_terminal(self.timeline)
         self.time += 1

@@ -98,7 +98,10 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, ta
             intervals.append((s, total_time - s))
 
         # 3) pintar intervalos de execução (somente se estiverem dentro da vida)
-        color = colors[i % len(colors)]
+        if task_colors and task in task_colors:
+            color = task_colors[task]
+        else:
+            color = colors[i % len(colors)]
         for st, dur in intervals:
             # recorta para que não ultrapasse [start_time, end_time)
             seg_start = max(st, start_time)
@@ -153,3 +156,102 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, ta
     plt.tight_layout()
     plt.savefig(filename, format="png", dpi=300)
     plt.show()
+
+def render_gantt_live(timeline, arrivals=None, finishes=None, wait_map=None, task_colors=None):
+    """Renderiza incrementalmente uma única figura de Gantt usando as cores originais das tarefas.
+
+    Só redesenha quando o tamanho da timeline aumenta.
+    """
+    global _LIVE_FIG, _LIVE_AX, _LIVE_LAST_LEN
+    total_time = len(timeline)
+    if _LIVE_FIG is None:
+        _LIVE_FIG, _LIVE_AX = plt.subplots(figsize=(10, 4))
+    if total_time == _LIVE_LAST_LEN:
+        plt.pause(0.001)
+        return
+    _LIVE_LAST_LEN = total_time
+    _LIVE_AX.clear()
+
+    tasks = sorted({t for t in timeline if t is not None and t != 'IDLE'})
+    if arrivals is None:
+        arrivals = {}
+        for task in tasks:
+            for i, cur in enumerate(timeline):
+                if cur == task:
+                    arrivals[task] = i
+                    break
+    if finishes is None:
+        finishes = {}
+        for task in tasks:
+            last = None
+            for i in range(total_time - 1, -1, -1):
+                if timeline[i] == task:
+                    last = i
+                    break
+            finishes[task] = (last + 1) if last is not None else arrivals.get(task, 0)
+
+    colors = plt.cm.tab10.colors
+    for i, task in enumerate(tasks):
+        y_pos = i - 0.4
+        start_time = arrivals.get(task, 0)
+        end_time = finishes.get(task, total_time)
+        life_duration = max(0, end_time - start_time)
+        _LIVE_AX.broken_barh([(start_time, life_duration)], (y_pos, 0.8), facecolors='none', edgecolors='black', linewidth=1.0)
+        intervals = []
+        s = None
+        for t_idx, cur in enumerate(timeline):
+            if cur == task:
+                if s is None:
+                    s = t_idx
+            else:
+                if s is not None:
+                    intervals.append((s, t_idx - s))
+                    s = None
+        if s is not None:
+            intervals.append((s, total_time - s))
+        exec_ticks = set()
+        for st, dur in intervals:
+            for tt in range(st, st + dur):
+                exec_ticks.add(tt)
+        if task_colors and task in task_colors:
+            color = task_colors[task]
+        else:
+            color = colors[i % len(colors)]
+        for st, dur in intervals:
+            seg_start = max(st, start_time)
+            seg_end = min(st + dur, end_time)
+            seg_dur = seg_end - seg_start
+            if seg_dur > 0:
+                _LIVE_AX.broken_barh([(seg_start, seg_dur)], (y_pos, 0.8), facecolors=color, edgecolors='black', linewidth=1.0)
+        waiting_ticks = set()
+        if wait_map and task in wait_map:
+            waiting_ticks.update(wait_map[task])
+        for tt in range(start_time, end_time):
+            if tt not in exec_ticks:
+                waiting_ticks.add(tt)
+        wait_intervals = []
+        ws = None
+        for tt in range(start_time, end_time):
+            if tt in waiting_ticks and tt not in exec_ticks:
+                if ws is None:
+                    ws = tt
+            else:
+                if ws is not None:
+                    wait_intervals.append((ws, tt - ws))
+                    ws = None
+        if ws is not None:
+            wait_intervals.append((ws, end_time - ws))
+        for st, dur in wait_intervals:
+            if dur > 0:
+                _LIVE_AX.broken_barh([(st, dur)], (y_pos, 0.8), facecolors='white', edgecolors='black', linewidth=0.8)
+
+    _LIVE_AX.set_xlabel('Tempo (t)')
+    _LIVE_AX.set_ylabel('Tarefas')
+    _LIVE_AX.set_yticks(range(len(tasks)))
+    _LIVE_AX.set_yticklabels(tasks)
+    _LIVE_AX.set_xticks(range(total_time + 1))
+    _LIVE_AX.grid(True, axis='x', linestyle=':', alpha=0.4)
+    _LIVE_AX.invert_yaxis()
+    _LIVE_AX.set_title('Debug Gantt (incremental)')
+    _LIVE_FIG.tight_layout()
+    plt.pause(0.001)
