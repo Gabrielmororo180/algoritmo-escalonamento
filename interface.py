@@ -15,7 +15,7 @@ class TaskEditorApp:
 
         # Cabeçalho: Algoritmo + Quantum
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
-        self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIORIDADE"], state="readonly", width=18)
+        self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP"], state="readonly", width=18)
         self.algorithm_cb.grid(row=0, column=1, pady=2)
         self.algorithm_cb.set("FIFO")
 

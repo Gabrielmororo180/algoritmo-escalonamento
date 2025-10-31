@@ -1,4 +1,4 @@
-PRIOP;2
+SRTF;2
 T1;red;0;5;2;
 T2;blue;0;2;3;
 T3;green;1;4;1;
