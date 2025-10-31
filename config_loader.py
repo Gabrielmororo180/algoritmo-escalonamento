@@ -1,3 +1,20 @@
+"""config_loader.py
+====================
+Responsável por carregar e validar o arquivo de configuração simples da simulação.
+
+Formato esperado:
+Primeira linha:
+    algoritmo;quantum
+Linhas seguintes:
+    id;cor;ingresso;duracao;prioridade;lista_eventos
+
+Decisões de design:
+- Parsing tolerante: campos faltantes recebem defaults evitando falha dura.
+- Defaults centralizados em `DEFAULTS` para reutilização por CLI e geração de template.
+- Função `generate_default_config` facilita primeira experiência do usuário.
+- Separação `parse_task_line` mantém `load_config` enxuto e testável.
+"""
+
 DEFAULTS = {
     "algorithm": "FIFO",
     "quantum": 3,

@@ -15,7 +15,7 @@ Linhas seguintes (uma por tarefa):
 id;cor;ingresso;duracao;prioridade;lista_eventos
 ```
 Observações:
-* `algoritmo` pode ser: `FIFO`, `SRTF`, `PRIORIDADE`, `PRIOP`.
+* `algoritmo` pode ser: `FIFO`, `SRTF`, `PRIOP`.
 * `quantum` é usado apenas em algoritmos que respeitam quantum (atualmente não usado por SRTF/PRIOP que ignoram quantum).
 * `lista_eventos` é uma lista separada por vírgulas (ex: `io:disk,mutex_lock:M1`). Se vazia, deixe o campo final em branco terminando com `;`.
 * Campos faltantes recebem valores default (cor=gray, prioridade=1, quantum=3, algoritmo=FIFO).

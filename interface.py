@@ -1,3 +1,15 @@
+"""interface.py
+================
+Interface gráfica (Tkinter) para criação, edição e execução de tarefas.
+
+Decisões:
+- Simples tabela (Treeview) para refletir estado das tarefas em memória.
+- IDs gerados sequencialmente (T1, T2, ...) para evitar colisões rápidas.
+- Salvamento explícito no arquivo padrão `sample_config.txt` antes de rodar
+    simulação (mantém compatibilidade com CLI).
+- Modo Debug expõe ticking manual, útil para fins didáticos.
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from config_loader import load_config
@@ -6,12 +18,19 @@ import tempfile
 from config_loader import load_config
 
 class TaskEditorApp:
+    """Aplicação principal da GUI de edição de tarefas.
+
+    Fluxo de uso:
+    1. Selecionar algoritmo/quantum.
+    2. Inserir tarefas (Ingresso, Duração, Prioridade, Cor).
+    3. Salvar ou executar diretamente.
+    4. Opcional: entrar em modo Debug para avançar tick a tick.
+    """
     def __init__(self, root):
         self.root = root
         self.root.title("Escalonador de Tarefas - Simulador SO")
-
-        self.tasks = []
-        self.task_counter = 1 
+        self.tasks = []           # Lista de tuplas representando tarefas na GUI
+        self.task_counter = 1     # Contador para geração de IDs únicos
 
         # Cabeçalho: Algoritmo + Quantum
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
@@ -61,9 +80,13 @@ class TaskEditorApp:
         self.tree.bind("<Double-1>", self.load_selected_task)
 
     def generate_task_id(self):
+        """Gera ID sequencial (T1, T2...). Evita necessidade de entrada manual."""
         return f"T{self.task_counter}"
 
     def load_from_file(self):
+        """Carrega tarefas de arquivo de configuração padrão e atualiza a tabela.
+        Ignora eventos (não exibidos na GUI). Reinicia contador de IDs.
+        """
         filepath = "sample_config.txt"
         
         try:
@@ -95,6 +118,9 @@ class TaskEditorApp:
             messagebox.showerror("Erro ao carregar arquivo", str(e))
 
     def insert_task(self):
+        """Insere nova tarefa com valores dos campos.
+        Valida campos numéricos básicos.
+        """
         try:
             task_id = self.generate_task_id()
             task = (
@@ -112,6 +138,7 @@ class TaskEditorApp:
             messagebox.showerror("Erro", "Campos numéricos inválidos.")
 
     def load_selected_task(self, event):
+        """Ao dar duplo clique na tabela, carrega valores nos campos para edição."""
         selected = self.tree.focus()
         if not selected:
             return
@@ -123,6 +150,7 @@ class TaskEditorApp:
         self.fields["cor"].set(values[1])
 
     def update_task(self):
+        """Atualiza tarefa existente mantendo o mesmo ID."""
         selected = self.tree.focus()
         if not selected:
             return
@@ -143,6 +171,9 @@ class TaskEditorApp:
             messagebox.showerror("Erro", "Campos numéricos inválidos.")
 
     def run_simulation(self):
+        """Salva tarefas em arquivo e executa simulação completa.
+        Reusa o arquivo para manter consistência com o fluxo CLI.
+        """
         if not self.tasks:
             messagebox.showwarning("Aviso", "Adicione pelo menos uma tarefa antes de simular.")
             return
@@ -171,6 +202,7 @@ class TaskEditorApp:
 
 
     def delete_task(self):
+        """Remove tarefa selecionada da lista e da tabela."""
         selected = self.tree.focus()
         if not selected:
             return
@@ -180,6 +212,7 @@ class TaskEditorApp:
         self.clear_fields()
 
     def save_to_file(self):
+        """Persiste conjunto atual de tarefas em `sample_config.txt`."""
         if not self.tasks:
             messagebox.showwarning("Aviso", "Nenhuma tarefa para salvar.")
             return
@@ -205,11 +238,13 @@ class TaskEditorApp:
             messagebox.showerror("Erro ao salvar", str(e))
 
     def clear_fields(self):
+        """Limpa campos de edição (exceto cor que volta ao default)."""
         for key in ["ingresso", "duração", "prioridade"]:
             self.fields[key].delete(0, tk.END)
         self.fields["cor"].set("red")
 
     def start_debug(self):
+        """Inicia modo debug preparando simulador para stepping manual."""
         if not self.tasks:
             messagebox.showwarning("Aviso", "Nenhuma tarefa para simular.")
             return
@@ -239,6 +274,7 @@ class TaskEditorApp:
             messagebox.showerror("Erro", str(e))
 
     def next_tick(self):
+        """Avança um tick no modo debug e mostra mensagem ao concluir todas as tarefas."""
         if not hasattr(self, 'simulator'):
             messagebox.showwarning("Aviso", "Inicie a simulação com o botão 'Debug' antes.")
             return

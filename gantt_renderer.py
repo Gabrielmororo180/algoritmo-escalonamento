@@ -1,3 +1,16 @@
+"""gantt_renderer.py
+=====================
+Responsável por gerar representações do cronograma de execução:
+- Terminal: tabela simplificada de tarefa por tick.
+- Imagem: gráfico de Gantt com diferenciação de execução (colorido) e espera (branco com borda).
+
+Decisões chave:
+1. Usar lista `timeline` indexada por tick simplifica reconstrução de intervalos.
+2. Calcular intervalos de execução por varredura linear evita armazenar estruturas extras.
+3. Espera é derivada: todos os ticks entre arrival e finish que não pertencem a execução.
+4. Uso de cores do colormap tab10 garante distinção consistente.
+"""
+
 import matplotlib.pyplot as plt
 
 def render_gantt_terminal(timeline, wait_map=None):
@@ -47,6 +60,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, fi
                         break
                 finishes[task] = (last + 1) if last is not None else arrivals.get(task, 0)
 
+    # Altura proporcional ao número de tarefas para leitura adequada.
     fig, ax = plt.subplots(figsize=(10, 0.8 * max(3, len(tasks))))
     colors = plt.cm.tab10.colors
     for i, task in enumerate(tasks):
@@ -59,7 +73,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, fi
         ax.broken_barh([(start_time, life_duration)], (y_pos, 0.8),
                        facecolors="none", edgecolors="black", linewidth=1.2)
 
-        # Intervalos de execução
+    # Intervalos de execução: detecta blocos contíguos de mesma tarefa.
         intervals = []
         s = None
         for t, cur in enumerate(timeline):
@@ -84,7 +98,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, fi
                 ax.broken_barh([(seg_start, seg_dur)], (y_pos, 0.8),
                                facecolors=color, edgecolors="black", linewidth=1.2)
 
-        # Ticks de espera: inclui todos os ticks entre arrival e end que não estão em execução
+    # Ticks de espera: inclui todos os ticks entre arrival e end não presentes em exec_ticks.
         waiting_ticks = set()
         if wait_map and task in wait_map:
             waiting_ticks.update(wait_map[task])
@@ -98,7 +112,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, fi
             if tt not in exec_ticks:
                 waiting_ticks.add(tt)
 
-        # Agrupa ticks contíguos
+    # Agrupa ticks contíguos para reduzir objetos desenhados (melhor performance e clareza visual).
         wait_intervals = []
         ws = None
         for t in range(start_time, end_time):

@@ -1,9 +1,40 @@
+"""simulator.py
+=================
+Contém a classe Simulator que executa o loop de escalonamento e coleta dados
+para visualização (timeline de execução e períodos de espera) e métricas
+básicas de chegada/conclusão.
+
+Decisões de design:
+-------------------
+1. `ready_queue` mantém apenas tarefas aguardando CPU. Ao iniciar execução
+    a tarefa é removida da fila; isso evita remoções duplicadas em término.
+2. Preempção delegada aos algoritmos via atributo `should_preempt` – reduz
+    complexidade aqui.
+3. `wait_map` registra ticks em que cada tarefa está pronta mas não executa.
+    Facilita visualização do tempo de espera e futura extração de métricas.
+4. `timeline` armazena por tick o id da tarefa executada ou None (idle).
+5. `arrivals_map` e `finish_map` guardam instante de chegada e término (exclusivo).
+6. Quantum só é incrementado se o algoritmo não sinaliza `ignore_quantum`.
+"""
+
 from tcb import TaskControlBlock
 from scheduler import get_scheduler
 from gantt_renderer import render_gantt_terminal, render_gantt_image
 
 class Simulator:
     def __init__(self, config):
+        """Inicializa o simulador.
+
+        Parâmetro `config` esperado:
+        {
+            'algorithm': <str>,
+            'quantum': <int>,
+            'tasks': [ {id_, color, arrival, duration, priority, events[]} ]
+        }
+
+        Justificativa: manter config como dict simples facilita carga de
+        diferentes fontes (arquivo, CLI, GUI) sem acoplamento a tipos.
+        """
         self.quantum = config["quantum"]
         self.scheduler = get_scheduler(config["algorithm"])
         self.time = 0
@@ -22,6 +53,9 @@ class Simulator:
         self.finish_map = {}
 
     def run(self):
+        """Executa a simulação completa até todas as tarefas finalizarem
+        ou até alcançar `tick_limit` de segurança para evitar loops.
+        """
         print(f"Iniciando simulação com algoritmo: {self.scheduler.__name__}")
         while not self.all_tasks_completed() and self.time < self.tick_limit:
             self._check_arrivals()  
@@ -35,7 +69,9 @@ class Simulator:
         render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map)
 
     def run_debug(self):
-     
+        """Reinicia estado interno para modo passo-a-passo.
+        Não avança ticks automaticamente; usar `step()`.
+        """
         self.time = 0
         self.timeline = []
         self.ready_queue = []
@@ -49,6 +85,9 @@ class Simulator:
             task.executed_ticks = 0
 
     def step(self):
+        """Executa um único tick da simulação em modo debug.
+        Retorna False se terminou ou atingiu limite.
+        """
         if self.all_tasks_completed() or self.time >= self.tick_limit:
             return False 
 
@@ -65,6 +104,9 @@ class Simulator:
 
 
     def _check_arrivals(self):
+        """Move tarefas cujo tempo de chegada == tempo atual para a ready_queue.
+        Armazena instante em `arrivals_map` se ainda não registrado.
+        """
         for task in self.tasks:
             if task.arrival == self.time and task not in self.ready_queue and not task.completed:
                 self.ready_queue.append(task)
@@ -99,12 +141,19 @@ class Simulator:
                     self.running_task = candidate
 
     def apply_aging(self):
+        #Exemplo simples de aging: incrementa prioridade de quem está esperando.
         for task in self.ready_queue:
             if task != self.running_task and not task.completed:
                 task.priority += 1 
 
 
     def _tick(self):
+        """Avança um tick de tempo:
+        - Atualiza tempos da tarefa corrente
+        - Registra espera das demais
+        - Aplica lógica de término ou de expiração de quantum
+        - Adiciona ID (ou None) à timeline para visualização
+        """
         if self.running_task:
             self.running_task.remaining_time -= 1
             self.running_task.executed_ticks += 1
@@ -144,4 +193,7 @@ class Simulator:
 
 
     def all_tasks_completed(self):
+        """Retorna True se todas as tarefas marcaram `completed=True`.
+        Facilita leitura do loop principal.
+        """
         return all(task.completed for task in self.tasks)
