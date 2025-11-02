@@ -454,6 +454,11 @@ class TaskEditorApp:
         ax.set_title("Gráfico de Gantt")
         fig.tight_layout()
         
+        # Salvar como PNG
+        png_filename = "gantt.png"
+        fig.savefig(png_filename, format="png", dpi=300, bbox_inches='tight')
+        print(f"Gráfico salvo em: {png_filename}")
+        
         # Embutir no frame
         canvas = FigureCanvasTkAgg(fig, master=self.gantt_frame)
         canvas.draw()
