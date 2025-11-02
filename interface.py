@@ -59,26 +59,32 @@ class TaskEditorApp:
             entry.grid(row=i+2, column=1, pady=2, columnspan=3, sticky="w")
             self.fields[label.lower()] = entry
 
-     
-        tk.Button(root, text="Carregar Arquivo", command=self.load_from_file).grid(row=6, column=4, pady=5)
-        tk.Button(root, text="Inserir", command=self.insert_task).grid(row=1, column=4, padx=10)
-        tk.Button(root, text="Atualizar", command=self.update_task).grid(row=2, column=4)
-        tk.Button(root, text="Excluir", command=self.delete_task).grid(row=3, column=4)
-        tk.Button(root, text="Salvar em arquivo", command=self.save_to_file).grid(row=4, column=4, pady=10)
-        tk.Button(root, text="Executar Simulação", command=self.run_simulation).grid(row=5, column=4, pady=5)
+        # Frame único para todos os botões em uma linha
+        buttons_frame = tk.Frame(root)
+        buttons_frame.grid(row=6, column=0, columnspan=5, sticky='w', pady=8)
 
-        tk.Button(root, text="Debug", command=self.start_debug).grid(row=8, column=0, pady=5)
-        tk.Button(root, text="Próximo Tick", command=self.next_tick).grid(row=8, column=1)
+        btn_specs = [
+            ("Carregar Arquivo", self.load_from_file),
+            ("Inserir", self.insert_task),
+            ("Atualizar", self.update_task),
+            ("Excluir", self.delete_task),
+            ("Salvar em arquivo", self.save_to_file),
+            ("Executar Simulação", self.run_simulation),
+            ("Debug", self.start_debug),
+            ("Próximo Tick", self.next_tick)
+        ]
+        for i, (label, cmd) in enumerate(btn_specs):
+            tk.Button(buttons_frame, text=label, command=cmd).grid(row=0, column=i, padx=4)
 
         # Lista de tarefas com ID visível
         self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade"], show="headings")
         for col in ["ID", "Cor", "Ingresso", "Duração", "Prioridade"]:
             self.tree.heading(col, text=col)
-        self.tree.grid(row=7, column=0, columnspan=5, pady=10)
+        self.tree.grid(row=7, column=0, columnspan=5, pady=10, sticky='we')
         self.tree.bind("<Double-1>", self.load_selected_task)
         
         # Frame para o gráfico Gantt
-        self.gantt_frame = tk.Frame(root, bd=2, relief='groove', height=300)
+        self.gantt_frame = tk.Frame(root, bd=2, relief='groove', height=400)
         self.gantt_frame.grid(row=10, column=0, columnspan=5, sticky='nsew', pady=10)
         self.gantt_frame.grid_propagate(False)
         self.root.grid_rowconfigure(10, weight=1)
