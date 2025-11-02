@@ -22,7 +22,7 @@ Decisões de design:
 
 from tcb import TaskControlBlock
 from scheduler import get_scheduler
-from gantt_renderer import render_gantt_terminal, render_gantt_image, render_gantt_live
+
 
 class Simulator:
     def __init__(self, config):
@@ -61,6 +61,25 @@ class Simulator:
         # Mapa de cores definidas por tarefa (id -> cor configurada)
         self.task_colors = {t.id: t.color for t in self.tasks}
 
+    def render_gantt_terminal(timeline, wait_map=None):
+        """Renderização simples em texto da linha do tempo.
+
+        Usa '---' para ticks ociosos (None) para evitar exceção ao fatiar.
+        """
+        print("\nGráfico de Gantt (terminal):\n")
+        header = ""
+        values = ""
+        for tick, task_id in enumerate(timeline):
+            label = (task_id[:3] if isinstance(task_id, str) else '---')
+            header += f"{label:^5}"
+            values += f"{tick:^5}"
+        print(header)
+        print(values)
+        if wait_map:
+            print("\nTempos de espera (ticks):")
+            for tid, ticks in wait_map.items():
+                print(f"{tid}: {len(ticks)} ticks -> {ticks}")
+
     def run(self):
         """Executa a simulação completa até todas as tarefas finalizarem
         ou até alcançar `tick_limit` de segurança para evitar loops.
@@ -73,9 +92,9 @@ class Simulator:
             
             self.time += 1
         print("Simulação encerrada.")
-        render_gantt_terminal(self.timeline)
+        self.render_gantt_terminal(self.timeline)
         # Passa mapas completos + cores definidas pelo usuário
-        render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
+        #render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
 
     def run_debug(self):
         """Reinicia estado interno para modo passo-a-passo.
@@ -148,9 +167,9 @@ class Simulator:
             for ts in snap['tasks']:
                 print(f"  - {ts['id']}: rem={ts['remaining']} dur={ts['duration']} prio={ts['priority']} waited={ts['waited_ticks']} completed={ts['completed']} waiting_now={ts['waiting_now']}")
             # Atualização incremental: evita gerar várias figuras
-            render_gantt_live(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
+            #render_gantt_live(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
         else:
-            render_gantt_terminal(self.timeline)
+            self.render_gantt_terminal(self.timeline)
         self.time += 1
         return True
 
