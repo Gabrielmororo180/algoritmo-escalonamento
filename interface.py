@@ -11,10 +11,9 @@ Decisões:
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 from config_loader import load_config
 from simulator import Simulator
-import tempfile
 from config_loader import load_config
 
 class TaskEditorApp:
@@ -29,10 +28,9 @@ class TaskEditorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Escalonador de Tarefas - Simulador SO")
-        self.tasks = []           # Lista de tuplas representando tarefas na GUI
-        self.task_counter = 1     # Contador para geração de IDs únicos
+        self.tasks = []          
+        self.task_counter = 1    
 
-        # Cabeçalho: Algoritmo + Quantum
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
         self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP"], state="readonly", width=18)
         self.algorithm_cb.grid(row=0, column=1, pady=2)
@@ -42,11 +40,9 @@ class TaskEditorApp:
         self.quantum_entry = tk.Entry(root, width=6)
         self.quantum_entry.grid(row=0, column=3)
         self.quantum_entry.insert(0, "3")
-
-        # Campos de tarefa (com Combobox de Cor)
         self.fields = {}
 
-        # Cor (como combobox)
+        
         tk.Label(root, text="Cor").grid(row=1, column=0, sticky="e")
         self.fields["cor"] = ttk.Combobox(root, values=[
             "red", "blue", "green", "orange", "purple", "yellow", "cyan", "gray", "black"
@@ -54,14 +50,13 @@ class TaskEditorApp:
         self.fields["cor"].grid(row=1, column=1, pady=2, columnspan=3, sticky="w")
         self.fields["cor"].set("red")
 
-        # Ingresso, Duração, Prioridade
         for i, label in enumerate(["Ingresso", "Duração", "Prioridade"]):
             tk.Label(root, text=label).grid(row=i+2, column=0, sticky="e")
             entry = tk.Entry(root, width=20)
             entry.grid(row=i+2, column=1, pady=2, columnspan=3, sticky="w")
             self.fields[label.lower()] = entry
 
-        # Botões
+     
         tk.Button(root, text="Carregar Arquivo", command=self.load_from_file).grid(row=6, column=4, pady=5)
         tk.Button(root, text="Inserir", command=self.insert_task).grid(row=1, column=4, padx=10)
         tk.Button(root, text="Atualizar", command=self.update_task).grid(row=2, column=4)

@@ -11,7 +11,6 @@ Linhas seguintes:
 Decisões de design:
 - Parsing tolerante: campos faltantes recebem defaults evitando falha dura.
 - Defaults centralizados em `DEFAULTS` para reutilização por CLI e geração de template.
-- Função `generate_default_config` facilita primeira experiência do usuário.
 - Separação `parse_task_line` mantém `load_config` enxuto e testável.
 """
 

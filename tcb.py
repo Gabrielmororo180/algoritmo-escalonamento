@@ -30,3 +30,4 @@ class TaskControlBlock:
         self.remaining_time = duration
         self.completed = False
         self.executed_ticks = 0
+        self.executed_count = 0

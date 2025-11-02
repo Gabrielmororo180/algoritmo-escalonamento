@@ -151,7 +151,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, ta
     ax.set_yticklabels(tasks)
     ax.set_xticks(range(total_time + 1))
     ax.grid(True, axis='x', linestyle=':', alpha=0.5)
-    ax.invert_yaxis()
+
     plt.title("Gráfico de Gantt (execução vs espera)")
     plt.tight_layout()
     plt.savefig(filename, format="png", dpi=300)
@@ -251,7 +251,6 @@ def render_gantt_live(timeline, arrivals=None, finishes=None, wait_map=None, tas
     _LIVE_AX.set_yticklabels(tasks)
     _LIVE_AX.set_xticks(range(total_time + 1))
     _LIVE_AX.grid(True, axis='x', linestyle=':', alpha=0.4)
-    _LIVE_AX.invert_yaxis()
     _LIVE_AX.set_title('Debug Gantt (incremental)')
     _LIVE_FIG.tight_layout()
     plt.pause(0.001)

@@ -18,7 +18,7 @@ from config_loader import load_config, generate_default_config, DEFAULTS
 from simulator import Simulator
 import argparse
 import sys
-import os
+
 
 def build_parser():
     #Constrói e retorna parser de argumentos.

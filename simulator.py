@@ -14,7 +14,10 @@ Decisões de design:
     Facilita visualização do tempo de espera e futura extração de métricas.
 4. `timeline` armazena por tick o id da tarefa executada ou None (idle).
 5. `arrivals_map` e `finish_map` guardam instante de chegada e término (exclusivo).
-6. Quantum só é incrementado se o algoritmo não sinaliza `ignore_quantum`.
+6. Algoritmos:
+   - FIFO: 
+   - SRTF: 
+   - PRIOP: 
 """
 
 from tcb import TaskControlBlock
@@ -46,13 +49,15 @@ class Simulator:
         self.ready_queue = []
         self.running_task = None
         self.timeline = []
-        # Lista por tick da tarefa em execução (None ou 'IDLE')
-        # E um dict acumulando ticks de espera por tarefa para o renderer avançado
+       
+
         self.wait_map = {}
         self.arrivals_map = {}
         self.finish_map = {}
-        # Flag interna para habilitar verbosidade adicional em modo debug
         self.debug_mode = False
+
+
+
         # Mapa de cores definidas por tarefa (id -> cor configurada)
         self.task_colors = {t.id: t.color for t in self.tasks}
 
@@ -161,53 +166,47 @@ class Simulator:
                 self.arrivals_map.setdefault(task.id, self.time)
 
     def _schedule(self):
+        """Realiza escalonamento: escolhe próxima tarefa ou verifica preempção.
+        SRTF/PRIOP: preemptivos, verificam a cada tick se deve trocar.
+        """
         # Se não há tarefa rodando ou a atual terminou, escolher nova.
         if not self.running_task or self.running_task.remaining_time <= 0:
             self.running_task = self.scheduler(self.ready_queue)
             if self.running_task:
-                self.running_task.executed_quantum = 0
+                self.running_task.executed_count = 0
                 # Remove da fila pois agora está em execução
                 if self.running_task in self.ready_queue:
                     self.ready_queue.remove(self.running_task)
             return
 
-        # Preempção imediata delegada ao scheduler (should_preempt)
-        if getattr(self.scheduler, 'preemptive', False):
+        # Preempção para SRTF e PRIOP (têm should_preempt)
+        if hasattr(self.scheduler, 'should_preempt'):
             candidate = self.scheduler(self.ready_queue)
             if candidate and candidate is not self.running_task:
-                should_switch = False
-                if hasattr(self.scheduler, 'should_preempt'):
-                    should_switch = self.scheduler.should_preempt(self.running_task, candidate)
-                if should_switch:
+                if self.scheduler.should_preempt(self.running_task, candidate):
+                    # Preempção confirmada: volta tarefa atual à fila
                     if self.running_task not in self.ready_queue and not self.running_task.completed:
                         self.ready_queue.append(self.running_task)
-                    self.running_task.executed_quantum = 0
-                    # Remover candidata da fila e promover
+                    self.running_task.executed_count = 0
+                    # Remove candidata da fila e promove
                     if candidate in self.ready_queue:
                         self.ready_queue.remove(candidate)
                     self.running_task = candidate
 
-    def apply_aging(self):
-        #Exemplo simples de aging: incrementa prioridade de quem está esperando.
-        for task in self.ready_queue:
-            if task != self.running_task and not task.completed:
-                task.priority += 1 
 
 
     def _tick(self):
         """Avança um tick de tempo:
         - Atualiza tempos da tarefa corrente
         - Registra espera das demais
-        - Aplica lógica de término ou de expiração de quantum
+        - Aplica lógica de término ou de expiração de quantum (SRTF/PRIOP)
         - Adiciona ID (ou None) à timeline para visualização
         """
         if self.running_task:
             self.running_task.remaining_time -= 1
             self.running_task.executed_ticks += 1
-            # Incrementa quantum somente se algoritmo usa quantum e não ignora.
-            if (not getattr(self.scheduler, 'non_preemptive', False) and
-                not getattr(self.scheduler, 'ignore_quantum', False)):
-                self.running_task.executed_quantum += 1
+            self.running_task.executed_count += 1
+            
             self.timeline.append(self.running_task.id)
             # Marca espera das demais tarefas na fila
             for task in self.ready_queue:
@@ -216,24 +215,21 @@ class Simulator:
 
             if self.running_task.remaining_time <= 0:
                 self.running_task.completed = True
-                # Não precisa remover: já foi removida ao iniciar execução
+               
                 print(f"Tarefa {self.running_task.id} concluída em t={self.time}")
                 self.finish_map[self.running_task.id] = self.time + 1  # fim exclusivo
                 self.running_task = None
 
-            elif (not getattr(self.scheduler, 'non_preemptive', False) and
-                  not getattr(self.scheduler, 'ignore_quantum', False) and
-                  self.running_task.executed_quantum >= self.quantum):
-                # Quantum expirou: preempção por fatia de tempo (Round-Robin genérico)
+            elif self.running_task.executed_count >= self.quantum:
+                # Quantum expirou: preempção por fatia de tempo (SRTF/PRIOP)
                 print(f"Tarefa {self.running_task.id} preemptada por quantum em t={self.time}")
-                # Rotaciona tarefa
+                # Rotaciona tarefa e deixa a "CPU" livre
                 self.ready_queue.append(self.running_task)
-                self.running_task.executed_quantum = 0
+                self.running_task.executed_count = 0
                 self.running_task = None
         else:
             # CPU ociosa
             self.timeline.append(None)
-            # Todas na fila estão esperando
             for task in self.ready_queue:
                 if not task.completed:
                     self.wait_map.setdefault(task.id, []).append(self.time)
