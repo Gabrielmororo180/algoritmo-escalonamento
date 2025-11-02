@@ -39,6 +39,7 @@ class Simulator:
         diferentes fontes (arquivo, CLI, GUI) sem acoplamento a tipos.
         """
         self.quantum = config["quantum"]
+        self.algorithm_name = config["algorithm"]
         self.scheduler = get_scheduler(config["algorithm"])
         self.time = 0
         self.tick_limit = 1000
@@ -61,7 +62,7 @@ class Simulator:
         # Mapa de cores definidas por tarefa (id -> cor configurada)
         self.task_colors = {t.id: t.color for t in self.tasks}
 
-    def render_gantt_terminal(timeline, wait_map=None):
+    def render_gantt_terminal(self, timeline, wait_map=None):
         """Renderização simples em texto da linha do tempo.
 
         Usa '---' para ticks ociosos (None) para evitar exceção ao fatiar.
@@ -84,7 +85,7 @@ class Simulator:
         """Executa a simulação completa até todas as tarefas finalizarem
         ou até alcançar `tick_limit` de segurança para evitar loops.
         """
-        print(f"Iniciando simulação com algoritmo: {self.scheduler.__name__}")
+        print(f"Iniciando simulação com algoritmo: {self.algorithm_name}")
         while not self.all_tasks_completed() and self.time < self.tick_limit:
             self._check_arrivals()  
             self._schedule()        
@@ -92,9 +93,7 @@ class Simulator:
             
             self.time += 1
         print("Simulação encerrada.")
-        self.render_gantt_terminal(self.timeline)
-        # Passa mapas completos + cores definidas pelo usuário
-        #render_gantt_image(self.timeline, arrivals=self.arrivals_map, finishes=self.finish_map, wait_map=self.wait_map, task_colors=self.task_colors)
+        self.render_gantt_terminal(self.timeline, self.wait_map)
 
     def run_debug(self):
         """Reinicia estado interno para modo passo-a-passo.

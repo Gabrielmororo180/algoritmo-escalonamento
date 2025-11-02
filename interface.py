@@ -362,7 +362,8 @@ class TaskEditorApp:
         
         # Renderizar gráfico
         total_time = len(timeline)
-        tasks = sorted({t for t in timeline if t is not None and t != 'IDLE'})
+        # Extrair IDs únicos de tarefas (são strings)
+        tasks = sorted({str(t) for t in timeline if t is not None and t != 'IDLE'})
         
         if not tasks:
             ax.text(0.5, 0.5, 'Nenhuma tarefa executada', ha='center', va='center')
