@@ -152,7 +152,7 @@ def render_gantt_image(timeline, arrivals=None, finishes=None, wait_map=None, ta
     ax.set_xticks(range(total_time + 1))
     ax.grid(True, axis='x', linestyle=':', alpha=0.5)
 
-    plt.title("Gráfico de Gantt (execução vs espera)")
+    plt.title("Gráfico de Gantt")
     plt.tight_layout()
     plt.savefig(filename, format="png", dpi=300)
     plt.show()

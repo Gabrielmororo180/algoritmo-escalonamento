@@ -221,7 +221,7 @@ class Simulator:
                 self.running_task = None
 
             elif self.running_task.executed_count >= self.quantum:
-                # Quantum expirou: preempção por fatia de tempo (SRTF/PRIOP)
+              
                 print(f"Tarefa {self.running_task.id} preemptada por quantum em t={self.time}")
                 # Rotaciona tarefa e deixa a "CPU" livre
                 self.ready_queue.append(self.running_task)
