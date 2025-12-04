@@ -70,15 +70,64 @@ def parse_task_line(line):
     duration_i = to_int(duration, 1)
     priority_i = to_int(priority, DEFAULTS['priority'])
     color_v = validate_hex_color(color)
-    events_list = [e.strip() for e in events.split(',') if e.strip()] if events else []
+    
+    # Parsear eventos de mutex
+    mutex_events = []
+    if events:
+        for event_str in events.split(','):
+            event_str = event_str.strip()
+            if event_str:
+                parsed_event = parse_mutex_event(event_str)
+                if parsed_event:
+                    mutex_events.append(parsed_event)
+    
     return {
         "id_": id_,
         "color": color_v,
         "arrival": arrival_i,
         "duration": duration_i,
         "priority": priority_i,
-        "events": events_list
+        "events": mutex_events
     }
+
+def parse_mutex_event(event_str):
+    """Parseia evento de mutex no formato MLxx:tt ou MUxx:tt.
+    
+    MLxx:tt - Lock do mutex xx no tempo relativo tt
+    MUxx:tt - Unlock do mutex xx no tempo relativo tt
+    
+    Args:
+        event_str (str): ex: "ML01:5", "MU02:10"
+        
+    Returns:
+        dict or None: {"type": "lock"|"unlock", "mutex_id": int, "time": int}
+                      ou None se formato inválido
+    """
+    event_str = event_str.strip().upper()
+    
+    if not (event_str.startswith("ML") or event_str.startswith("MU")):
+        return None
+    
+    try:
+        action = event_str[:2]  # "ML" ou "MU"
+        rest = event_str[2:]    # "01:5" ou "02:10"
+        
+        if ":" not in rest:
+            return None
+        
+        mutex_str, time_str = rest.split(":", 1)
+        mutex_id = int(mutex_str)
+        time_val = int(time_str)
+        
+        action_type = "lock" if action == "ML" else "unlock"
+        
+        return {
+            "type": action_type,
+            "mutex_id": mutex_id,
+            "time": time_val  # tempo relativo ao início da tarefa
+        }
+    except (ValueError, IndexError):
+        return None
 
 def load_config(filename):
     # Gera config padrão se arquivo não existir

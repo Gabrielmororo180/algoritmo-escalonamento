@@ -22,6 +22,7 @@ Decisões de design:
 
 from tcb import TaskControlBlock
 from scheduler import get_scheduler
+from mutex import Mutex
 
 
 class Simulator:
@@ -57,10 +58,24 @@ class Simulator:
         self.finish_map = {}
         self.debug_mode = False
 
-
+        # Pool de mutexes: mapeamento de mutex_id -> objeto Mutex
+        self.mutexes = {}
+        self._initialize_mutexes()
 
         # Mapa de cores definidas por tarefa (id -> cor configurada)
         self.task_colors = {t.id: t.color for t in self.tasks}
+
+    def _initialize_mutexes(self):
+        """Identifica todos os mutexes referenciados nos eventos das tarefas
+        e cria objetos Mutex para cada um."""
+        mutex_ids = set()
+        for task in self.tasks:
+            for event in task.events:
+                if event.get("type") in ("lock", "unlock"):
+                    mutex_ids.add(event.get("mutex_id"))
+        
+        for mutex_id in mutex_ids:
+            self.mutexes[mutex_id] = Mutex(mutex_id)
 
     def render_gantt_terminal(self, timeline, wait_map=None):
         """Renderização simples em texto da linha do tempo.
@@ -106,10 +121,19 @@ class Simulator:
         self.wait_map = {}
         self.arrivals_map = {}
         self.finish_map = {}
+        
+        # Reinicializa estado das tarefas
         for task in self.tasks:
             task.remaining_time = task.duration
             task.completed = False
             task.executed_ticks = 0
+            task.blocked = False
+            task.blocking_mutex_id = None
+            task.elapsed_time = 0
+        
+        # Reinicializa mutexes
+        self._initialize_mutexes()
+        
         self.debug_mode = True
 
     def snapshot(self):
@@ -120,11 +144,12 @@ class Simulator:
         - running: id da tarefa em execução ou None
         - ready_queue: lista de ids das tarefas prontas
         - tasks: lista de dicts por tarefa (id, arrival, duration, remaining, priority,
-                 completed, waited_ticks, executed_ticks)
+                 completed, waited_ticks, executed_ticks, blocked, blocking_mutex_id)
         - wait_map: mapa de ticks de espera (cópia superficial)
         - timeline: cópia da linha do tempo até agora
         - algorithm: nome do algoritmo ativo
         - quantum: valor configurado
+        - mutexes: estado de cada mutex {id, locked, owner, waiting}
         """
         task_states = []
         for t in self.tasks:
@@ -137,8 +162,13 @@ class Simulator:
                 "completed": t.completed,
                 "executed_ticks": t.executed_ticks,
                 "waited_ticks": len(self.wait_map.get(t.id, [])),
-                "waiting_now": (t in self.ready_queue and t is not self.running_task and not t.completed)
+                "waiting_now": (t in self.ready_queue and t is not self.running_task and not t.completed),
+                "blocked": t.blocked,
+                "blocking_mutex_id": t.blocking_mutex_id
             })
+        
+        mutex_states = [self.mutexes[m_id].get_status() for m_id in sorted(self.mutexes.keys())]
+        
         return {
             "time": self.time,
             "running": self.running_task.id if self.running_task else None,
@@ -147,7 +177,8 @@ class Simulator:
             "wait_map": {k: list(v) for k, v in self.wait_map.items()},
             "timeline": list(self.timeline),
             "algorithm": self.scheduler.__name__,
-            "quantum": self.quantum
+            "quantum": self.quantum,
+            "mutexes": mutex_states
         }
 
     def step(self):
@@ -186,10 +217,14 @@ class Simulator:
     def _schedule(self):
         """Realiza escalonamento: escolhe próxima tarefa ou verifica preempção.
         SRTF/PRIOP: preemptivos, verificam a cada tick se deve trocar.
+        
+        Nota: Tarefas bloqueadas não são consideradas para escalonamento.
         """
         # Se não há tarefa rodando ou a atual terminou, escolher nova.
         if not self.running_task or self.running_task.remaining_time <= 0:
-            self.running_task = self.scheduler(self.ready_queue)
+            # Filtra tarefas não bloqueadas
+            available = [t for t in self.ready_queue if not t.blocked]
+            self.running_task = self.scheduler(available)
             if self.running_task:
                 self.running_task.executed_count = 0
                 # Remove da fila pois agora está em execução
@@ -199,7 +234,8 @@ class Simulator:
 
         # Preempção para SRTF e PRIOP (têm should_preempt)
         if hasattr(self.scheduler, 'should_preempt'):
-            candidate = self.scheduler(self.ready_queue)
+            available = [t for t in self.ready_queue if not t.blocked]
+            candidate = self.scheduler(available)
             if candidate and candidate is not self.running_task:
                 if self.scheduler.should_preempt(self.running_task, candidate):
                     # Preempção confirmada: volta tarefa atual à fila
@@ -215,15 +251,31 @@ class Simulator:
 
     def _tick(self):
         """Avança um tick de tempo:
+        - Processa eventos de mutex (lock/unlock)
         - Atualiza tempos da tarefa corrente
         - Registra espera das demais
         - Aplica lógica de término ou de expiração de quantum (SRTF/PRIOP)
         - Adiciona ID (ou None) à timeline para visualização
         """
         if self.running_task:
+            # Processa eventos de mutex para a tarefa em execução
+            self._process_mutex_events(self.running_task)
+            
+            # Se tarefa ficou bloqueada, não executa CPU este tick
+            if self.running_task.blocked:
+                self.timeline.append(None)  # CPU ociosa por bloqueio
+                # Tarefa bloqueada também registra espera
+                for task in self.ready_queue:
+                    if not task.completed:
+                        self.wait_map.setdefault(task.id, []).append(self.time)
+                self.running_task = None
+                self.time += 1
+                return
+            
             self.running_task.remaining_time -= 1
             self.running_task.executed_ticks += 1
             self.running_task.executed_count += 1
+            self.running_task.elapsed_time += 1
             
             self.timeline.append(self.running_task.id)
             # Marca espera das demais tarefas na fila
@@ -251,6 +303,42 @@ class Simulator:
             for task in self.ready_queue:
                 if not task.completed:
                     self.wait_map.setdefault(task.id, []).append(self.time)
+
+    def _process_mutex_events(self, task):
+        """Processa eventos de lock/unlock para uma tarefa em execução.
+        
+        Tempo relativo (elapsed_time) determina qual evento disparar.
+        Lock: tenta adquirir; se falhar, marca tarefa como bloqueada.
+        Unlock: libera o mutex e promove próxima tarefa em espera.
+        """
+        events = task.get_pending_events(task.elapsed_time)
+        
+        for event in events:
+            event_type = event.get("type")
+            mutex_id = event.get("mutex_id")
+            
+            if event_type == "lock":
+                mutex = self.mutexes.get(mutex_id)
+                if mutex:
+                    if not mutex.try_lock(task.id):
+                        # Lock falhou: tarefa fica bloqueada
+                        task.blocked = True
+                        task.blocking_mutex_id = mutex_id
+                        print(f"Tarefa {task.id} bloqueada aguardando M{mutex_id}")
+            
+            elif event_type == "unlock":
+                mutex = self.mutexes.get(mutex_id)
+                if mutex:
+                    next_task_id = mutex.unlock(task.id)
+                    print(f"Tarefa {task.id} liberou M{mutex_id}")
+                    
+                    # Se há tarefa esperando, desbloqueia
+                    if next_task_id:
+                        for t in self.tasks:
+                            if t.id == next_task_id:
+                                t.blocked = False
+                                t.blocking_mutex_id = None
+                                print(f"Tarefa {next_task_id} desbloqueada em M{mutex_id}")
 
 
     def all_tasks_completed(self):

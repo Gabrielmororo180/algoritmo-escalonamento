@@ -93,6 +93,13 @@ class TaskEditorApp:
             entry.grid(row=i+2, column=1, pady=2, columnspan=3, sticky="w")
             self.fields[label.lower()] = entry
 
+        # Campo de eventos (mutex)
+        tk.Label(root, text="Eventos").grid(row=5, column=0, sticky="ne")
+        eventos_entry = tk.Entry(root, width=20)
+        eventos_entry.grid(row=5, column=1, pady=2, columnspan=3, sticky="w")
+        self.fields["eventos"] = eventos_entry
+        tk.Label(root, text="(ex: ML1:2,MU1:5)", font=('Arial', 8), fg='gray').grid(row=5, column=4, sticky="w")
+
         # Frame único para todos os botões em uma linha
         buttons_frame = tk.Frame(root)
         buttons_frame.grid(row=6, column=0, columnspan=5, sticky='w', pady=8)
@@ -154,7 +161,7 @@ class TaskEditorApp:
         # Botão Pausar/Retomar
         self.pause_debug_btn = tk.Button(
             self.debug_toolbar,
-            text='⏸ Pausar',
+            text=' Pausar',
             command=self.pause_debug,
             bg='#FF9800',
             fg='white',
@@ -167,7 +174,7 @@ class TaskEditorApp:
         # Botão Reiniciar
         self.restart_debug_btn = tk.Button(
             self.debug_toolbar,
-            text='🔄 Reiniciar',
+            text=' Reiniciar',
             command=self.restart_debug,
             bg='#2196F3',
             fg='white',
@@ -180,7 +187,7 @@ class TaskEditorApp:
         # Botão Sair do Debug
         self.exit_debug_btn = tk.Button(
             self.debug_toolbar,
-            text='✕ Sair do Debug',
+            text='Sair do Debug',
             command=self.exit_debug,
             bg='#f44336',
             fg='white',
@@ -191,9 +198,22 @@ class TaskEditorApp:
         self.exit_debug_btn.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Lista de tarefas com ID visível
-        self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade"], show="headings")
-        for col in ["ID", "Cor", "Ingresso", "Duração", "Prioridade"]:
+        self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos"], show="headings", height=8)
+        
+        # Configurar colunas com larguras
+        col_widths = {
+            "ID": 40,
+            "Cor": 70,
+            "Ingresso": 70,
+            "Duração": 70,
+            "Prioridade": 70,
+            "Eventos": 150
+        }
+        
+        for col in ["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos"]:
             self.tree.heading(col, text=col)
+            self.tree.column(col, width=col_widths[col])
+        
         self.tree.grid(row=7, column=0, columnspan=5, pady=10, sticky='we')
         self.tree.bind("<Double-1>", self.load_selected_task)
         
@@ -218,7 +238,7 @@ class TaskEditorApp:
 
     def load_from_file(self):
         """Carrega tarefas de arquivo de configuração padrão e atualiza a tabela.
-        Ignora eventos (não exibidos na GUI). Reinicia contador de IDs.
+        Inclui eventos (mutex) na tabela. Reinicia contador de IDs.
         """
         filepath = "sample_config.txt"
         
@@ -234,12 +254,28 @@ class TaskEditorApp:
 
             for task_dict in config["tasks"]:
                 task_id = f"T{self.task_counter}"
+                eventos_list = task_dict.get("events", [])
+                
+                # Converte lista de eventos para string
+                if isinstance(eventos_list, list) and eventos_list:
+                    # Reconstrói string a partir dos dicts
+                    eventos_strs = []
+                    for e in eventos_list:
+                        event_type = "ML" if e.get("type") == "lock" else "MU"
+                        mutex_id = e.get("mutex_id", "")
+                        time_val = e.get("time", "")
+                        eventos_strs.append(f"{event_type}{mutex_id}:{time_val}")
+                    eventos_str = ",".join(eventos_strs)
+                else:
+                    eventos_str = ""
+                
                 task = (
                     task_id,
                     task_dict["color"],
                     task_dict["arrival"],
                     task_dict["duration"],
-                    task_dict["priority"]
+                    task_dict["priority"],
+                    eventos_str
                 )
                 self.tasks.append(task)
                 self.tree.insert("", "end", values=task)
@@ -259,12 +295,16 @@ class TaskEditorApp:
             color_name = self.fields["cor"].get()
             hex_color = self.color_options.get(color_name, "#FF0000")
             
+            # Obtém eventos (campo opcional)
+            eventos_str = self.fields.get("eventos", tk.Entry()).get() if "eventos" in self.fields else ""
+            
             task = (
                 task_id,
                 hex_color,
                 int(self.fields["ingresso"].get()),
                 int(self.fields["duração"].get()),
-                int(self.fields["prioridade"].get())
+                int(self.fields["prioridade"].get()),
+                eventos_str
             )
             self.tasks.append(task)
             self.tree.insert("", "end", values=task)
@@ -279,7 +319,7 @@ class TaskEditorApp:
         if not selected:
             return
         values = self.tree.item(selected, "values")
-        keys = ["cor", "ingresso", "duração", "prioridade"]
+        keys = ["cor", "ingresso", "duração", "prioridade", "eventos"]
         for k, v in zip(keys, values[1:]):
             if k == "cor":
                 # Tenta encontrar o nome da cor pelo hex
@@ -304,13 +344,15 @@ class TaskEditorApp:
             old_id = self.tree.item(selected, "values")[0]
             color_name = self.fields["cor"].get()
             hex_color = self.color_options.get(color_name, "#FF0000")
+            eventos_str = self.fields.get("eventos", tk.Entry()).get() if "eventos" in self.fields else ""
             
             updated_task = (
                 old_id,
                 hex_color,
                 int(self.fields["ingresso"].get()),
                 int(self.fields["duração"].get()),
-                int(self.fields["prioridade"].get())
+                int(self.fields["prioridade"].get()),
+                eventos_str
             )
             self.tree.item(selected, values=updated_task)
             index = self.tree.index(selected)
@@ -339,7 +381,9 @@ class TaskEditorApp:
             with open("sample_config.txt", "w") as f:
                 f.write(f"{algorithm};{quantum}\n")
                 for task in self.tasks:
-                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};\n"
+                    # Incluir eventos (6º elemento se existir)
+                    eventos = task[5] if len(task) > 5 else ""
+                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{eventos}\n"
                     f.write(linha)
 
             config = load_config("sample_config.txt")
@@ -383,7 +427,9 @@ class TaskEditorApp:
             with open(filepath, "w") as f:
                 f.write(f"{algorithm};{quantum}\n")
                 for task in self.tasks:
-                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};\n"
+                    # Incluir eventos (6º elemento se existir)
+                    eventos = task[5] if len(task) > 5 else ""
+                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{eventos}\n"
                     f.write(linha)
                     
             messagebox.showinfo("Sucesso", f"Arquivo salvo: {filepath}")
@@ -392,8 +438,9 @@ class TaskEditorApp:
 
     def clear_fields(self):
         """Limpa campos de edição (exceto cor que volta ao default)."""
-        for key in ["ingresso", "duração", "prioridade"]:
-            self.fields[key].delete(0, tk.END)
+        for key in ["ingresso", "duração", "prioridade", "eventos"]:
+            if key in self.fields:
+                self.fields[key].delete(0, tk.END)
         self.fields["cor"].set("Vermelho")
         self.update_color_preview()
 
@@ -568,11 +615,36 @@ class TaskEditorApp:
         lines.append(f"Rodando: {snap['running'] or 'IDLE'}")
         lines.append(f"Fila de Prontos: {', '.join(snap['ready_queue']) if snap['ready_queue'] else '(vazia)'}")
         lines.append("\nTarefas:")
-        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4}"
+        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4} {'Bloq':>4}"
         lines.append(header)
         lines.append('-' * len(header))
         for t in snap['tasks']:
-            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4}")
+            blocked_str = f"M{t['blocking_mutex_id']}" if t['blocked'] else 'N'
+            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4} {blocked_str:>4}")
+        
+        # Adiciona eventos de cada tarefa
+        lines.append("\nEventos de Tarefas:")
+        has_events = False
+        if hasattr(self, 'simulator') and hasattr(self.simulator, 'tasks'):
+            for sim_task in self.simulator.tasks:
+                if sim_task.events:
+                    has_events = True
+                    eventos_str = ", ".join([f"{e['type'][:1].upper()}{e['mutex_id']}:{e['time']}" for e in sim_task.events])
+                    lines.append(f"  {sim_task.id}: {eventos_str}")
+        
+        if not has_events:
+            lines.append("  (nenhum evento)")
+        
+        # Adiciona estado dos mutexes se disponível
+        if snap.get('mutexes'):
+            lines.append("\nMutexes:")
+            for mutex_state in snap['mutexes']:
+                mutex_id = mutex_state['id']
+                locked = "Bloqueado" if mutex_state['locked'] else "Livre"
+                owner = f"Proprietário: {mutex_state['owner']}" if mutex_state['owner'] else "Proprietário: Nenhum"
+                waiting = f"Aguardando: {', '.join(mutex_state['waiting'])}" if mutex_state['waiting'] else "Aguardando: Nenhum"
+                lines.append(f"  M{mutex_id}: {locked} | {owner} | {waiting}")
+        
         lines.append("\nTimeline (últimos 30 ticks):")
         last30 = snap['timeline'][-30:]
         lines.append(' '.join([str(x) if x is not None else '-' for x in last30]))
