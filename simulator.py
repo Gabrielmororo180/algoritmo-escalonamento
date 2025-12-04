@@ -82,20 +82,31 @@ class Simulator:
         """Renderização simples em texto da linha do tempo.
 
         Usa '---' para ticks ociosos (None) para evitar exceção ao fatiar.
+        Mostra apenas os primeiros 40 ticks para evitar saída muito grande.
         """
         print("\nGráfico de Gantt (terminal):\n")
+        
+        # Limita a exibição aos primeiros ticks ativos (últimas tarefas completadas)
+        display_limit = min(len(timeline), 40)
+        timeline_display = timeline[:display_limit]
+        
         header = ""
         values = ""
-        for tick, task_id in enumerate(timeline):
+        for tick, task_id in enumerate(timeline_display):
             label = (task_id[:3] if isinstance(task_id, str) else '---')
-            header += f"{label:^5}"
-            values += f"{tick:^5}"
+            header += f"{label:^4}"
+            values += f"{tick:^4}"
         print(header)
         print(values)
+        
+        if len(timeline) > display_limit:
+            print(f"\n... ({len(timeline) - display_limit} ticks omitidos)")
+        
         if wait_map:
             print("\nTempos de espera (ticks):")
             for tid, ticks in wait_map.items():
-                print(f"{tid}: {len(ticks)} ticks -> {ticks}")
+                # Mostra só o total, não a lista completa
+                print(f"{tid}: {len(ticks)} ticks")
 
     def run(self):
         """Executa a simulação completa até todas as tarefas finalizarem
