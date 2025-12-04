@@ -32,7 +32,11 @@ class TaskEditorApp:
         self.root = root
         self.root.title("Escalonador de Tarefas - Simulador SO")
         self.tasks = []          
-        self.task_counter = 1    
+        self.task_counter = 1
+        
+        # Histórico de eventos para navegação
+        self.debug_history = []  # Lista de snapshots calculados
+        self.debug_current_index = -1  # Índice atual na história    
 
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
         self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP"], state="readonly", width=18)
@@ -46,12 +50,42 @@ class TaskEditorApp:
         self.fields = {}
 
         
-        tk.Label(root, text="Cor").grid(row=1, column=0, sticky="e")
-        self.fields["cor"] = ttk.Combobox(root, values=[
-            "red", "blue", "green", "orange", "purple", "yellow", "cyan", "gray", "black"
-        ], state="readonly", width=18)
-        self.fields["cor"].grid(row=1, column=1, pady=2, columnspan=3, sticky="w")
-        self.fields["cor"].set("red")
+        tk.Label(root, text="Cor (Hex)").grid(row=1, column=0, sticky="e")
+        
+        # Frame para cor com combobox e preview
+        cor_frame = tk.Frame(root)
+        cor_frame.grid(row=1, column=1, pady=2, columnspan=3, sticky="w")
+        
+        # Cores predefinidas em hexadecimal
+        self.color_options = {
+            "Vermelho": "#FF0000",
+            "Verde": "#00FF00",
+            "Azul": "#0000FF",
+            "Amarelo": "#FFFF00",
+            "Magenta": "#FF00FF",
+            "Ciano": "#00FFFF",
+            "Laranja": "#FFA500",
+            "Roxo": "#800080",
+            "Cinza": "#808080",
+            "Preto": "#000000",
+            "Branco": "#FFFFFF",
+            "Rosa": "#FFC0CB"
+        }
+        
+        # Combobox com cores
+        self.fields["cor"] = ttk.Combobox(
+            cor_frame, 
+            values=list(self.color_options.keys()),
+            state="readonly",
+            width=15
+        )
+        self.fields["cor"].pack(side=tk.LEFT, padx=5)
+        self.fields["cor"].set("Vermelho")
+        self.fields["cor"].bind("<<ComboboxSelected>>", self.update_color_preview)
+        
+        # Preview da cor
+        self.color_preview = tk.Canvas(cor_frame, width=30, height=30, bg="#FF0000", relief="solid", borderwidth=1)
+        self.color_preview.pack(side=tk.LEFT, padx=5)
 
         for i, label in enumerate(["Ingresso", "Duração", "Prioridade"]):
             tk.Label(root, text=label).grid(row=i+2, column=0, sticky="e")
@@ -71,10 +105,90 @@ class TaskEditorApp:
             ("Salvar em arquivo", self.save_to_file),
             ("Executar Simulação", self.run_simulation),
             ("Debug", self.start_debug),
-            ("Próximo Tick", self.next_tick)
         ]
         for i, (label, cmd) in enumerate(btn_specs):
             tk.Button(buttons_frame, text=label, command=cmd).grid(row=0, column=i, padx=4)
+        
+        # Barra de ferramentas de Debug (inicialmente invisível)
+        self.debug_toolbar = tk.Frame(root, bd=2, relief='sunken', bg='#f0f0f0')
+        self.debug_toolbar.grid(row=8, column=0, columnspan=5, sticky='ew', pady=5)
+        self.debug_toolbar.grid_remove()  # Invisível inicialmente
+        
+        # Label de progresso
+        self.debug_progress_label = tk.Label(self.debug_toolbar, text='', bg='#f0f0f0', font=('Arial', 10, 'bold'))
+        self.debug_progress_label.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        # Separador
+        ttk.Separator(self.debug_toolbar, orient='vertical').pack(side=tk.LEFT, fill='y', padx=5)
+        
+        # Botão Voltar Tick
+        self.prev_tick_btn = tk.Button(
+            self.debug_toolbar,
+            text='⏮ Tick Anterior',
+            command=self.prev_tick,
+            bg='#2196F3',
+            fg='white',
+            font=('Arial', 10),
+            padx=10,
+            pady=8,
+            state=tk.DISABLED
+        )
+        self.prev_tick_btn.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Botão Próximo Tick (grande e destacado)
+        self.next_tick_btn = tk.Button(
+            self.debug_toolbar, 
+            text='⏭ Próximo Tick', 
+            command=self.next_tick,
+            bg='#4CAF50',
+            fg='white',
+            font=('Arial', 11, 'bold'),
+            padx=15,
+            pady=8
+        )
+        self.next_tick_btn.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        # Separador
+        ttk.Separator(self.debug_toolbar, orient='vertical').pack(side=tk.LEFT, fill='y', padx=5)
+        
+        # Botão Pausar/Retomar
+        self.pause_debug_btn = tk.Button(
+            self.debug_toolbar,
+            text='⏸ Pausar',
+            command=self.pause_debug,
+            bg='#FF9800',
+            fg='white',
+            font=('Arial', 10),
+            padx=10,
+            pady=8
+        )
+        self.pause_debug_btn.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Botão Reiniciar
+        self.restart_debug_btn = tk.Button(
+            self.debug_toolbar,
+            text='🔄 Reiniciar',
+            command=self.restart_debug,
+            bg='#2196F3',
+            fg='white',
+            font=('Arial', 10),
+            padx=10,
+            pady=8
+        )
+        self.restart_debug_btn.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Botão Sair do Debug
+        self.exit_debug_btn = tk.Button(
+            self.debug_toolbar,
+            text='✕ Sair do Debug',
+            command=self.exit_debug,
+            bg='#f44336',
+            fg='white',
+            font=('Arial', 10),
+            padx=10,
+            pady=8
+        )
+        self.exit_debug_btn.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Lista de tarefas com ID visível
         self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade"], show="headings")
@@ -92,6 +206,15 @@ class TaskEditorApp:
     def generate_task_id(self):
         """Gera ID sequencial (T1, T2...). Evita necessidade de entrada manual."""
         return f"T{self.task_counter}"
+
+    def update_color_preview(self, event=None):
+        """Atualiza o preview da cor quando o usuário seleciona uma cor."""
+        try:
+            color_name = self.fields["cor"].get()
+            hex_color = self.color_options.get(color_name, "#808080")
+            self.color_preview.config(bg=hex_color)
+        except:
+            self.color_preview.config(bg="#808080")
 
     def load_from_file(self):
         """Carrega tarefas de arquivo de configuração padrão e atualiza a tabela.
@@ -133,9 +256,12 @@ class TaskEditorApp:
         """
         try:
             task_id = self.generate_task_id()
+            color_name = self.fields["cor"].get()
+            hex_color = self.color_options.get(color_name, "#FF0000")
+            
             task = (
                 task_id,
-                self.fields["cor"].get(),
+                hex_color,
                 int(self.fields["ingresso"].get()),
                 int(self.fields["duração"].get()),
                 int(self.fields["prioridade"].get())
@@ -155,9 +281,19 @@ class TaskEditorApp:
         values = self.tree.item(selected, "values")
         keys = ["cor", "ingresso", "duração", "prioridade"]
         for k, v in zip(keys, values[1:]):
-            self.fields[k].delete(0, tk.END)
-            self.fields[k].insert(0, v)
-        self.fields["cor"].set(values[1])
+            if k == "cor":
+                # Tenta encontrar o nome da cor pelo hex
+                hex_value = str(v).upper()
+                color_name = "Vermelho"  # padrão
+                for name, hex_code in self.color_options.items():
+                    if hex_code.upper() == hex_value:
+                        color_name = name
+                        break
+                self.fields[k].set(color_name)
+                self.update_color_preview()
+            else:
+                self.fields[k].delete(0, tk.END)
+                self.fields[k].insert(0, str(v))
 
     def update_task(self):
         """Atualiza tarefa existente mantendo o mesmo ID."""
@@ -166,9 +302,12 @@ class TaskEditorApp:
             return
         try:
             old_id = self.tree.item(selected, "values")[0]
+            color_name = self.fields["cor"].get()
+            hex_color = self.color_options.get(color_name, "#FF0000")
+            
             updated_task = (
                 old_id,
-                self.fields["cor"].get(),
+                hex_color,
                 int(self.fields["ingresso"].get()),
                 int(self.fields["duração"].get()),
                 int(self.fields["prioridade"].get())
@@ -255,7 +394,8 @@ class TaskEditorApp:
         """Limpa campos de edição (exceto cor que volta ao default)."""
         for key in ["ingresso", "duração", "prioridade"]:
             self.fields[key].delete(0, tk.END)
-        self.fields["cor"].set("red")
+        self.fields["cor"].set("Vermelho")
+        self.update_color_preview()
 
     def start_debug(self):
         """Inicia modo debug preparando simulador para stepping manual."""
@@ -282,6 +422,18 @@ class TaskEditorApp:
             config = load_config("sample_config.txt")
             self.simulator = Simulator(config)
             self.simulator.run_debug()
+            self.debug_active = True
+            self.debug_paused = False
+            
+            # Inicializa histórico de eventos
+            self.debug_history = []
+            self.debug_current_index = -1
+            
+            # Captura o estado inicial (tick 0)
+            initial_snap = self.simulator.snapshot()
+            self.debug_history.append(initial_snap)
+            self.debug_current_index = 0
+            
             # Cria/limpa painel de estado se ainda não existir
             if not hasattr(self, 'debug_frame'):
                 self.debug_frame = tk.Frame(self.root, bd=2, relief='groove')
@@ -292,11 +444,10 @@ class TaskEditorApp:
             else:
                 self.debug_text.delete('1.0', tk.END)
             
-            self.update_debug_snapshot()
-            # Renderiza gráfico Gantt inicial no modo debug
-            self.update_debug_gantt()
+            # Mostra barra de ferramentas
+            self.debug_toolbar.grid()
+            self.update_debug_display()
 
-            messagebox.showinfo("Modo Debug", " Clique em 'Próximo Tick' para continuar.")
         except Exception as e:
             messagebox.showerror("Erro", str(e))
 
@@ -305,23 +456,116 @@ class TaskEditorApp:
         if not hasattr(self, 'simulator'):
             messagebox.showwarning("Aviso", "Inicie a simulação com o botão 'Debug' antes.")
             return
-
-        tick_result = self.simulator.step()
-        self.update_debug_snapshot()
-        self.update_debug_gantt()
-
-        if not tick_result:
-            messagebox.showinfo("Fim", "Todas as tarefas foram finalizadas.")
-
-    def update_debug_snapshot(self):
-        """Renderiza snapshot detalhado do simulador no painel de debug."""
-        if not hasattr(self, 'simulator') or not hasattr(self, 'debug_text'):
+        
+        if self.debug_paused:
+            messagebox.showinfo("Pausado", "Debug está pausado. Clique em 'Pausar' novamente para retomar.")
             return
-        snap = self.simulator.snapshot()
+
+        # Verifica se próximo passo já existe no histórico
+        if self.debug_current_index < len(self.debug_history) - 1:
+            # Já existe, apenas avança no histórico
+            self.debug_current_index += 1
+            self.update_debug_display()
+        else:
+            # Precisa calcular novo passo
+            # Se voltou e está em meio do histórico, reconstrói o simulador até aqui
+            if self.debug_current_index < len(self.debug_history) - 1:
+                self._rebuild_simulator_to_tick(self.debug_current_index)
+            
+            # Executa próximo passo
+            tick_result = self.simulator.step()
+            
+            # Salva o novo estado na história
+            new_snap = self.simulator.snapshot()
+            self.debug_history.append(new_snap)
+            self.debug_current_index += 1
+            
+            self.update_debug_display()
+
+            if not tick_result:
+                messagebox.showinfo("Fim", "Todas as tarefas foram finalizadas.")
+                self.exit_debug()
+    
+    def _rebuild_simulator_to_tick(self, target_tick):
+        """Reconstrói o simulador até um tick específico."""
+        from config_loader import load_config
+        
+        config = load_config("sample_config.txt")
+        self.simulator = Simulator(config)
+        self.simulator.run_debug()
+        
+        # Executa até o tick alvo
+        for _ in range(target_tick):
+            self.simulator.step()
+
+    def prev_tick(self):
+        """Volta um tick no modo debug usando o histórico."""
+        if not hasattr(self, 'simulator'):
+            return
+        
+        if self.debug_current_index > 0:
+            self.debug_current_index -= 1
+            self.update_debug_display()
+
+    def update_debug_display(self):
+        """Atualiza a exibição com o snapshot atual do histórico."""
+        if self.debug_current_index < 0 or self.debug_current_index >= len(self.debug_history):
+            return
+        
+        snap = self.debug_history[self.debug_current_index]
+        
+        # Atualiza snapshot visual
+        self.update_debug_snapshot_from_data(snap)
+        # Atualiza Gantt
+        self.update_debug_gantt_from_data(snap)
+        # Atualiza progresso
+        self.update_debug_progress_from_data(snap)
+        
+        # Habilita/desabilita botões
+        self.prev_tick_btn.config(state=tk.NORMAL if self.debug_current_index > 0 else tk.DISABLED)
+        self.next_tick_btn.config(state=tk.NORMAL if self.debug_current_index < len(self.debug_history) - 1 else tk.NORMAL)
+
+    def pause_debug(self):
+        """Pausa ou retoma o modo debug."""
+        if not hasattr(self, 'simulator'):
+            return
+        
+        self.debug_paused = not self.debug_paused
+        if self.debug_paused:
+            self.pause_debug_btn.config(text='▶ Retomar', bg='#4CAF50')
+        else:
+            self.pause_debug_btn.config(text='⏸ Pausar', bg='#FF9800')
+
+    def restart_debug(self):
+        """Reinicia o debug do zero."""
+        if not hasattr(self, 'simulator'):
+            return
+        
+        if messagebox.askyesno("Confirmar", "Deseja reiniciar o debug? Perderá o progresso atual."):
+            self.debug_active = False
+            self.debug_paused = False
+            self.debug_toolbar.grid_remove()
+            self.start_debug()
+
+    def exit_debug(self):
+        """Sai do modo debug e oculta a barra de ferramentas."""
+        self.debug_active = False
+        self.debug_paused = False
+        self.debug_toolbar.grid_remove()
+        self.pause_debug_btn.config(text='⏸ Pausar', bg='#FF9800')
+        if hasattr(self, 'debug_frame'):
+            self.debug_text.delete('1.0', tk.END)
+            self.debug_text.insert(tk.END, 'Debug finalizado.')
+    
+    def update_debug_snapshot_from_data(self, snap):
+        """Renderiza snapshot usando dados do histórico."""
+        if not hasattr(self, 'debug_text'):
+            return
+        
         lines = []
         lines.append(f"Tick atual: {snap['time']}")
         lines.append(f"Algoritmo: {snap['algorithm']} | Quantum: {snap['quantum']}")
-        lines.append(f"Rodando: {snap['running']}")
+        lines.append(f"Rodando: {snap['running'] or 'IDLE'}")
         lines.append(f"Fila de Prontos: {', '.join(snap['ready_queue']) if snap['ready_queue'] else '(vazia)'}")
         lines.append("\nTarefas:")
         header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4}"
@@ -334,6 +578,45 @@ class TaskEditorApp:
         lines.append(' '.join([str(x) if x is not None else '-' for x in last30]))
         self.debug_text.delete('1.0', tk.END)
         self.debug_text.insert(tk.END, '\n'.join(lines))
+
+    def update_debug_gantt_from_data(self, snap):
+        """Atualiza Gantt usando snapshot do histórico."""
+        if not hasattr(self, 'simulator'):
+            return
+        
+        # Cria um objeto temporário com os dados do snapshot
+        class TempSimulator:
+            pass
+        
+        temp = TempSimulator()
+        temp.timeline = snap['timeline']
+        temp.arrivals_map = snap.get('arrivals_map', {})
+        temp.finish_map = snap.get('finish_map', {})
+        temp.wait_map = snap.get('wait_map', {})
+        temp.task_colors = getattr(self.simulator, 'task_colors', {})
+        
+        self.render_gantt_in_frame(temp)
+
+    def update_debug_progress_from_data(self, snap):
+        """Atualiza progresso usando dados do snapshot."""
+        if not hasattr(self, 'debug_progress_label'):
+            return
+        
+        time = snap['time']
+        running = snap['running'] or 'IDLE'
+        completed = sum(1 for t in snap['tasks'] if t['completed'])
+        total = len(snap['tasks'])
+        
+        status = "PAUSADO" if self.debug_paused else "EXECUTANDO"
+        progress_text = f"Tick: {time} | Rodando: {running} | Tarefas: {completed}/{total} | {status}"
+        self.debug_progress_label.config(text=progress_text)
+
+    def update_debug_snapshot(self):
+        """Renderiza snapshot detalhado do simulador no painel de debug."""
+        if not hasattr(self, 'simulator') or not hasattr(self, 'debug_text'):
+            return
+        snap = self.simulator.snapshot()
+        self.update_debug_snapshot_from_data(snap)
 
     def update_debug_gantt(self):
         """Atualiza o gráfico Gantt em tempo real no modo debug."""

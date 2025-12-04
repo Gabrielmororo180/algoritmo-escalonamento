@@ -17,7 +17,7 @@ Decisões de design:
 DEFAULTS = {
     "algorithm": "FIFO",
     "quantum": 3,
-    "color": "gray",
+    "color": "#808080",  # gray em hexadecimal
     "priority": 1,
     "events": []
 }
@@ -50,10 +50,26 @@ def parse_task_line(line):
             return int(val)
         except (ValueError, TypeError):
             return default
+    
+    def validate_hex_color(color_str):
+        """Valida se é uma cor hexadecimal válida, senão usa default."""
+        if not color_str:
+            return DEFAULTS['color']
+        
+        # Se não começa com #, adiciona
+        if not color_str.startswith("#"):
+            color_str = "#" + color_str
+        
+        # Valida formato #RRGGBB (6 caracteres hex)
+        if len(color_str) == 7 and all(c in "0123456789ABCDEFabcdef" for c in color_str[1:]):
+            return color_str.upper()
+        else:
+            return DEFAULTS['color']
+    
     arrival_i = to_int(arrival, 0)
     duration_i = to_int(duration, 1)
     priority_i = to_int(priority, DEFAULTS['priority'])
-    color_v = color if color else DEFAULTS['color']
+    color_v = validate_hex_color(color)
     events_list = [e.strip() for e in events.split(',') if e.strip()] if events else []
     return {
         "id_": id_,
