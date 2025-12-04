@@ -71,15 +71,22 @@ def parse_task_line(line):
     priority_i = to_int(priority, DEFAULTS['priority'])
     color_v = validate_hex_color(color)
     
-    # Parsear eventos de mutex
+    # Parsear eventos de mutex e IO
     mutex_events = []
+    io_events = []
     if events:
         for event_str in events.split(','):
             event_str = event_str.strip()
             if event_str:
+                # Tenta parsear como mutex primeiro
                 parsed_event = parse_mutex_event(event_str)
                 if parsed_event:
                     mutex_events.append(parsed_event)
+                else:
+                    # Tenta parsear como IO
+                    parsed_io = parse_io_event(event_str)
+                    if parsed_io:
+                        io_events.append(parsed_io)
     
     return {
         "id_": id_,
@@ -87,7 +94,8 @@ def parse_task_line(line):
         "arrival": arrival_i,
         "duration": duration_i,
         "priority": priority_i,
-        "events": mutex_events
+        "events": mutex_events,
+        "io_events": io_events
     }
 
 def parse_mutex_event(event_str):
@@ -125,6 +133,41 @@ def parse_mutex_event(event_str):
             "type": action_type,
             "mutex_id": mutex_id,
             "time": time_val  # tempo relativo ao início da tarefa
+        }
+    except (ValueError, IndexError):
+        return None
+
+def parse_io_event(event_str):
+    """Parseia evento de E/S no formato IOxx-yy.
+    
+    IOxx-yy - Operação de E/S que inicia no tempo xx e dura yy ticks
+    
+    Args:
+        event_str (str): ex: "IO2-5", "IO10-3"
+        
+    Returns:
+        dict or None: {"type": "io", "time": int, "duration": int}
+                      ou None se formato inválido
+    """
+    event_str = event_str.strip().upper()
+    
+    if not event_str.startswith("IO"):
+        return None
+    
+    try:
+        rest = event_str[2:]  # "2-5" ou "10-3"
+        
+        if "-" not in rest:
+            return None
+        
+        time_str, duration_str = rest.split("-", 1)
+        time_val = int(time_str)
+        duration_val = int(duration_str)
+        
+        return {
+            "type": "io",
+            "time": time_val,        # tempo relativo ao início da tarefa
+            "duration": duration_val # duração da operação em ticks
         }
     except (ValueError, IndexError):
         return None

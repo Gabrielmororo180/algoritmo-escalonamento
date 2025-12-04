@@ -100,9 +100,16 @@ class TaskEditorApp:
         self.fields["eventos"] = eventos_entry
         tk.Label(root, text="(ex: ML1:2,MU1:5)", font=('Arial', 8), fg='gray').grid(row=5, column=4, sticky="w")
 
+        # Campo de eventos de IO
+        tk.Label(root, text="IO Eventos").grid(row=6, column=0, sticky="ne")
+        io_eventos_entry = tk.Entry(root, width=20)
+        io_eventos_entry.grid(row=6, column=1, pady=2, columnspan=3, sticky="w")
+        self.fields["io_eventos"] = io_eventos_entry
+        tk.Label(root, text="(ex: IO2-5,IO10-3)", font=('Arial', 8), fg='gray').grid(row=6, column=4, sticky="w")
+
         # Frame único para todos os botões em uma linha
         buttons_frame = tk.Frame(root)
-        buttons_frame.grid(row=6, column=0, columnspan=5, sticky='w', pady=8)
+        buttons_frame.grid(row=7, column=0, columnspan=5, sticky='w', pady=8)
 
         btn_specs = [
             ("Carregar Arquivo", self.load_from_file),
@@ -118,7 +125,7 @@ class TaskEditorApp:
         
         # Barra de ferramentas de Debug (inicialmente invisível)
         self.debug_toolbar = tk.Frame(root, bd=2, relief='sunken', bg='#f0f0f0')
-        self.debug_toolbar.grid(row=8, column=0, columnspan=5, sticky='ew', pady=5)
+        self.debug_toolbar.grid(row=9, column=0, columnspan=5, sticky='ew', pady=5)
         self.debug_toolbar.grid_remove()  # Invisível inicialmente
         
         # Label de progresso
@@ -198,7 +205,7 @@ class TaskEditorApp:
         self.exit_debug_btn.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Lista de tarefas com ID visível
-        self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos"], show="headings", height=8)
+        self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos", "IO Eventos"], show="headings", height=8)
         
         # Configurar colunas com larguras
         col_widths = {
@@ -207,19 +214,20 @@ class TaskEditorApp:
             "Ingresso": 70,
             "Duração": 70,
             "Prioridade": 70,
-            "Eventos": 150
+            "Eventos": 150,
+            "IO Eventos": 150
         }
         
-        for col in ["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos"]:
+        for col in ["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos", "IO Eventos"]:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=col_widths[col])
         
-        self.tree.grid(row=7, column=0, columnspan=5, pady=10, sticky='we')
+        self.tree.grid(row=8, column=0, columnspan=5, pady=10, sticky='we')
         self.tree.bind("<Double-1>", self.load_selected_task)
         
         # Frame para o gráfico Gantt
         self.gantt_frame = tk.Frame(root, bd=2, relief='groove', height=400)
-        self.gantt_frame.grid(row=10, column=0, columnspan=5, sticky='nsew', pady=10)
+        self.gantt_frame.grid(row=11, column=0, columnspan=5, sticky='nsew', pady=10)
         self.gantt_frame.grid_propagate(False)
         self.root.grid_rowconfigure(10, weight=1)
 
@@ -238,7 +246,7 @@ class TaskEditorApp:
 
     def load_from_file(self):
         """Carrega tarefas de arquivo de configuração padrão e atualiza a tabela.
-        Inclui eventos (mutex) na tabela. Reinicia contador de IDs.
+        Inclui eventos (mutex) e io_eventos na tabela. Reinicia contador de IDs.
         """
         filepath = "sample_config.txt"
         
@@ -254,9 +262,9 @@ class TaskEditorApp:
 
             for task_dict in config["tasks"]:
                 task_id = f"T{self.task_counter}"
-                eventos_list = task_dict.get("events", [])
                 
-                # Converte lista de eventos para string
+                # Processa eventos de mutex
+                eventos_list = task_dict.get("events", [])
                 if isinstance(eventos_list, list) and eventos_list:
                     # Reconstrói string a partir dos dicts
                     eventos_strs = []
@@ -269,13 +277,27 @@ class TaskEditorApp:
                 else:
                     eventos_str = ""
                 
+                # Processa eventos de IO
+                io_eventos_list = task_dict.get("io_events", [])
+                if isinstance(io_eventos_list, list) and io_eventos_list:
+                    # Reconstrói string a partir dos dicts
+                    io_eventos_strs = []
+                    for e in io_eventos_list:
+                        time_val = e.get("time", "")
+                        duration_val = e.get("duration", "")
+                        io_eventos_strs.append(f"IO{time_val}-{duration_val}")
+                    io_eventos_str = ",".join(io_eventos_strs)
+                else:
+                    io_eventos_str = ""
+                
                 task = (
                     task_id,
                     task_dict["color"],
                     task_dict["arrival"],
                     task_dict["duration"],
                     task_dict["priority"],
-                    eventos_str
+                    eventos_str,
+                    io_eventos_str
                 )
                 self.tasks.append(task)
                 self.tree.insert("", "end", values=task)
@@ -295,8 +317,9 @@ class TaskEditorApp:
             color_name = self.fields["cor"].get()
             hex_color = self.color_options.get(color_name, "#FF0000")
             
-            # Obtém eventos (campo opcional)
+            # Obtém eventos (campos opcionais)
             eventos_str = self.fields.get("eventos", tk.Entry()).get() if "eventos" in self.fields else ""
+            io_eventos_str = self.fields.get("io_eventos", tk.Entry()).get() if "io_eventos" in self.fields else ""
             
             task = (
                 task_id,
@@ -304,7 +327,8 @@ class TaskEditorApp:
                 int(self.fields["ingresso"].get()),
                 int(self.fields["duração"].get()),
                 int(self.fields["prioridade"].get()),
-                eventos_str
+                eventos_str,
+                io_eventos_str
             )
             self.tasks.append(task)
             self.tree.insert("", "end", values=task)
@@ -319,7 +343,7 @@ class TaskEditorApp:
         if not selected:
             return
         values = self.tree.item(selected, "values")
-        keys = ["cor", "ingresso", "duração", "prioridade", "eventos"]
+        keys = ["cor", "ingresso", "duração", "prioridade", "eventos", "io_eventos"]
         for k, v in zip(keys, values[1:]):
             if k == "cor":
                 # Tenta encontrar o nome da cor pelo hex
@@ -345,6 +369,7 @@ class TaskEditorApp:
             color_name = self.fields["cor"].get()
             hex_color = self.color_options.get(color_name, "#FF0000")
             eventos_str = self.fields.get("eventos", tk.Entry()).get() if "eventos" in self.fields else ""
+            io_eventos_str = self.fields.get("io_eventos", tk.Entry()).get() if "io_eventos" in self.fields else ""
             
             updated_task = (
                 old_id,
@@ -352,7 +377,8 @@ class TaskEditorApp:
                 int(self.fields["ingresso"].get()),
                 int(self.fields["duração"].get()),
                 int(self.fields["prioridade"].get()),
-                eventos_str
+                eventos_str,
+                io_eventos_str
             )
             self.tree.item(selected, values=updated_task)
             index = self.tree.index(selected)
@@ -363,11 +389,15 @@ class TaskEditorApp:
 
     def run_simulation(self):
         """Salva tarefas em arquivo e executa simulação completa.
-        Reusa o arquivo para manter consistência com o fluxo CLI.
+        Se não houver tarefas, carrega do arquivo automaticamente.
+        Depois exibe o snapshot final com a mesma formatação do debug.
         """
+        # Se não há tarefas, tenta carregar do arquivo
         if not self.tasks:
-            messagebox.showwarning("Aviso", "Adicione pelo menos uma tarefa antes de simular.")
-            return
+            self.load_from_file()
+            if not self.tasks:
+                messagebox.showwarning("Aviso", "Nenhuma tarefa para simular.")
+                return
 
         algorithm = self.algorithm_cb.get()
         try:
@@ -381,20 +411,51 @@ class TaskEditorApp:
             with open("sample_config.txt", "w") as f:
                 f.write(f"{algorithm};{quantum}\n")
                 for task in self.tasks:
-                    # Incluir eventos (6º elemento se existir)
+                    # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""
-                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{eventos}\n"
+                    io_eventos = task[6] if len(task) > 6 else ""
+                    
+                    # Combina eventos e io_eventos
+                    all_events = eventos
+                    if io_eventos:
+                        all_events = f"{eventos},{io_eventos}" if eventos else io_eventos
+                    
+                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{all_events}\n"
                     f.write(linha)
 
             config = load_config("sample_config.txt")
-            simulator = Simulator(config)
-            simulator.run()
+            self.simulator = Simulator(config)
+            self.simulator.run()
             
             # Renderiza gráfico Gantt no frame
-            self.render_gantt_in_frame(simulator)
+            self.render_gantt_in_frame(self.simulator)
+            
+            # Mostra snapshot final em um painel de debug
+            self._show_final_snapshot()
             
         except Exception as e:
             messagebox.showerror("Erro ao simular", str(e))
+
+    def _show_final_snapshot(self):
+        """Exibe o snapshot final da simulação com formatação de debug."""
+        if not hasattr(self, 'simulator'):
+            return
+        
+        # Cria/limpa painel de estado
+        if not hasattr(self, 'debug_frame'):
+            self.debug_frame = tk.Frame(self.root, bd=2, relief='groove')
+            self.debug_frame.grid(row=9, column=0, columnspan=5, sticky='we', pady=5)
+            tk.Label(self.debug_frame, text='Estado Final da Simulação').grid(row=0, column=0, sticky='w')
+            self.debug_text = tk.Text(self.debug_frame, height=12, width=80, font=('Consolas', 9))
+            self.debug_text.grid(row=1, column=0, sticky='we')
+        else:
+            self.debug_text.delete('1.0', tk.END)
+        
+        # Obtém snapshot final
+        snap = self.simulator.snapshot()
+        
+        # Usa a mesma função de renderização do debug
+        self.update_debug_snapshot_from_data(snap)
 
 
 
@@ -427,9 +488,16 @@ class TaskEditorApp:
             with open(filepath, "w") as f:
                 f.write(f"{algorithm};{quantum}\n")
                 for task in self.tasks:
-                    # Incluir eventos (6º elemento se existir)
+                    # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""
-                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{eventos}\n"
+                    io_eventos = task[6] if len(task) > 6 else ""
+                    
+                    # Combina eventos e io_eventos
+                    all_events = eventos
+                    if io_eventos:
+                        all_events = f"{eventos},{io_eventos}" if eventos else io_eventos
+                    
+                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{all_events}\n"
                     f.write(linha)
                     
             messagebox.showinfo("Sucesso", f"Arquivo salvo: {filepath}")
@@ -438,7 +506,7 @@ class TaskEditorApp:
 
     def clear_fields(self):
         """Limpa campos de edição (exceto cor que volta ao default)."""
-        for key in ["ingresso", "duração", "prioridade", "eventos"]:
+        for key in ["ingresso", "duração", "prioridade", "eventos", "io_eventos"]:
             if key in self.fields:
                 self.fields[key].delete(0, tk.END)
         self.fields["cor"].set("Vermelho")
@@ -462,7 +530,16 @@ class TaskEditorApp:
             with open("sample_config.txt", "w") as f:
                 f.write(f"{algorithm};{quantum}\n")
                 for task in self.tasks:
-                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};\n"
+                    # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
+                    eventos = task[5] if len(task) > 5 else ""
+                    io_eventos = task[6] if len(task) > 6 else ""
+                    
+                    # Combina eventos e io_eventos
+                    all_events = eventos
+                    if io_eventos:
+                        all_events = f"{eventos},{io_eventos}" if eventos else io_eventos
+                    
+                    linha = f"{task[0]};{task[1]};{task[2]};{task[3]};{task[4]};{all_events}\n"
                     f.write(linha)
 
             from config_loader import load_config
@@ -615,22 +692,35 @@ class TaskEditorApp:
         lines.append(f"Rodando: {snap['running'] or 'IDLE'}")
         lines.append(f"Fila de Prontos: {', '.join(snap['ready_queue']) if snap['ready_queue'] else '(vazia)'}")
         lines.append("\nTarefas:")
-        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4} {'Bloq':>4}"
+        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4} {'Bloq':>4} {'IO':>5}"
         lines.append(header)
         lines.append('-' * len(header))
         for t in snap['tasks']:
             blocked_str = f"M{t['blocking_mutex_id']}" if t['blocked'] else 'N'
-            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4} {blocked_str:>4}")
+            io_str = f"{t['io_remaining']}t" if t['io_blocked'] else 'N'
+            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4} {blocked_str:>4} {io_str:>5}")
         
         # Adiciona eventos de cada tarefa
         lines.append("\nEventos de Tarefas:")
         has_events = False
         if hasattr(self, 'simulator') and hasattr(self.simulator, 'tasks'):
             for sim_task in self.simulator.tasks:
+                events_parts = []
+                
+                # Mutex events
                 if sim_task.events:
                     has_events = True
                     eventos_str = ", ".join([f"{e['type'][:1].upper()}{e['mutex_id']}:{e['time']}" for e in sim_task.events])
-                    lines.append(f"  {sim_task.id}: {eventos_str}")
+                    events_parts.append(eventos_str)
+                
+                # IO events
+                if sim_task.io_events:
+                    has_events = True
+                    io_str = ", ".join([f"IO{e['time']}-{e['duration']}" for e in sim_task.io_events])
+                    events_parts.append(io_str)
+                
+                if events_parts:
+                    lines.append(f"  {sim_task.id}: {' | '.join(events_parts)}")
         
         if not has_events:
             lines.append("  (nenhum evento)")
