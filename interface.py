@@ -256,9 +256,15 @@ class TaskEditorApp:
             self.quantum_entry.delete(0, tk.END)
             self.quantum_entry.insert(0, str(config["quantum"]))
 
-            self.tasks = []
-            self.tree.delete(*self.tree.get_children())
-            self.task_counter = 1
+            # NÃO limpa a tabela existente - apenas adiciona novas tarefas
+            # self.tree.delete(*self.tree.get_children())
+            
+            # Se a tabela está vazia, começa do T1
+            if not self.tasks:
+                self.task_counter = 1
+            else:
+                # Se já tem tarefas, continua a partir da próxima
+                self.task_counter = len(self.tasks) + 1
 
             for task_dict in config["tasks"]:
                 task_id = f"T{self.task_counter}"
@@ -444,8 +450,8 @@ class TaskEditorApp:
         # Cria/limpa painel de estado
         if not hasattr(self, 'debug_frame'):
             self.debug_frame = tk.Frame(self.root, bd=2, relief='groove')
-            self.debug_frame.grid(row=9, column=0, columnspan=5, sticky='we', pady=5)
-            tk.Label(self.debug_frame, text='Estado Final da Simulação').grid(row=0, column=0, sticky='w')
+            self.debug_frame.grid(row=10, column=0, columnspan=5, sticky='we', pady=5)
+            tk.Label(self.debug_frame, text='Estado Debug (snapshot)').grid(row=0, column=0, sticky='w')
             self.debug_text = tk.Text(self.debug_frame, height=12, width=80, font=('Consolas', 9))
             self.debug_text.grid(row=1, column=0, sticky='we')
         else:
