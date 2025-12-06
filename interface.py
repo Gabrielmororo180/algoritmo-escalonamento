@@ -125,7 +125,7 @@ class TaskEditorApp:
         
         # Barra de ferramentas de Debug (inicialmente invisível)
         self.debug_toolbar = tk.Frame(root, bd=2, relief='sunken', bg='#f0f0f0')
-        self.debug_toolbar.grid(row=9, column=0, columnspan=5, sticky='ew', pady=5)
+        self.debug_toolbar.grid(row=8, column=0, columnspan=5, sticky='ew', pady=5)
         self.debug_toolbar.grid_remove()  # Invisível inicialmente
         
         # Label de progresso
@@ -222,14 +222,14 @@ class TaskEditorApp:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=col_widths[col])
         
-        self.tree.grid(row=8, column=0, columnspan=5, pady=10, sticky='we')
+        self.tree.grid(row=9, column=0, columnspan=5, pady=10, sticky='we')
         self.tree.bind("<Double-1>", self.load_selected_task)
         
         # Frame para o gráfico Gantt
         self.gantt_frame = tk.Frame(root, bd=2, relief='groove', height=400)
         self.gantt_frame.grid(row=11, column=0, columnspan=5, sticky='nsew', pady=10)
         self.gantt_frame.grid_propagate(False)
-        self.root.grid_rowconfigure(10, weight=1)
+        self.root.grid_rowconfigure(11, weight=1)
 
     def generate_task_id(self):
         """Gera ID sequencial (T1, T2...). Evita necessidade de entrada manual."""
@@ -561,7 +561,7 @@ class TaskEditorApp:
             # Cria/limpa painel de estado se ainda não existir
             if not hasattr(self, 'debug_frame'):
                 self.debug_frame = tk.Frame(self.root, bd=2, relief='groove')
-                self.debug_frame.grid(row=9, column=0, columnspan=5, sticky='we', pady=5)
+                self.debug_frame.grid(row=10, column=0, columnspan=5, sticky='we', pady=5)
                 tk.Label(self.debug_frame, text='Estado Debug (snapshot)').grid(row=0, column=0, sticky='w')
                 self.debug_text = tk.Text(self.debug_frame, height=12, width=80, font=('Consolas', 9))
                 self.debug_text.grid(row=1, column=0, sticky='we')
