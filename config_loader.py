@@ -43,10 +43,19 @@ def generate_default_config(path="sample_config.txt", tasks=5):
 
 def parse_task_line(line):
     parts = line.split(";")
-    # Garante 6 campos (último eventos pode faltar)
-    while len(parts) < 6:
+    # Garante pelo menos 5 campos (id, cor, ingresso, duração, prioridade)
+    while len(parts) < 5:
         parts.append("")
-    id_, color, arrival, duration, priority, events = parts[:6]
+    
+    id_ = parts[0]
+    color = parts[1]
+    arrival = parts[2]
+    duration = parts[3]
+    priority = parts[4]
+    
+    # Eventos são todos os campos depois do 5º, separados por ";"
+    # Junta novamente com "," para que parse_task_line possa processar
+    events = ",".join(parts[5:]) if len(parts) > 5 else ""
     # Aplicar defaults e conversões seguras
     def to_int(val, default):
         try:
@@ -141,12 +150,12 @@ def parse_mutex_event(event_str):
         return None
 
 def parse_io_event(event_str):
-    """Parseia evento de E/S no formato IOxx-yy.
+    """Parseia evento de E/S no formato IO:xx-yy.
     
-    IOxx-yy - Operação de E/S que inicia no tempo xx e dura yy ticks
+    IO:xx-yy - Operação de E/S que inicia no tempo xx e dura yy ticks
     
     Args:
-        event_str (str): ex: "IO2-5", "IO10-3"
+        event_str (str): ex: "IO:2-5", "IO:10-3"
         
     Returns:
         dict or None: {"type": "io", "time": int, "duration": int}
@@ -158,7 +167,11 @@ def parse_io_event(event_str):
         return None
     
     try:
-        rest = event_str[2:]  # "2-5" ou "10-3"
+        rest = event_str[2:]  # ":2-5" ou ":10-3" ou "2-5" (compatibilidade)
+        
+        # Remove o ":" se estiver presente
+        if rest.startswith(":"):
+            rest = rest[1:]
         
         if "-" not in rest:
             return None

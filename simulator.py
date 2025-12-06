@@ -336,44 +336,82 @@ class Simulator:
                     self._process_io_events(task)
         
         if self.running_task:
-            # Incrementa tempo de execução relativo ANTES de processar eventos
-            self.running_task.elapsed_time += 1
-            
-            # Processa eventos de IO para a tarefa em execução
-            self._process_io_events(self.running_task)
-            
-            # Se tarefa ficou bloqueada por IO, não executa CPU este tick
-            if self.running_task.io_blocked:
-                self.timeline.append(None)  # CPU ociosa por bloqueio de IO
-                # Readiciona tarefa à fila de prontos
-                if self.running_task not in self.ready_queue and not self.running_task.completed:
-                    self.ready_queue.append(self.running_task)
-                # Tarefa bloqueada também registra espera
-                for task in self.ready_queue:
-                    if not task.completed:
-                        self.wait_map.setdefault(task.id, []).append(self.time)
-                self.running_task = None
-                return
-            
-            # Processa eventos de mutex para a tarefa em execução
-            self._process_mutex_events(self.running_task)
-            
-            # Se tarefa ficou bloqueada por mutex, não executa CPU este tick
-            if self.running_task.blocked:
-                self.timeline.append(None)  # CPU ociosa por bloqueio de mutex
-                # Readiciona tarefa à fila de prontos
-                if self.running_task not in self.ready_queue and not self.running_task.completed:
-                    self.ready_queue.append(self.running_task)
-                # Tarefa bloqueada também registra espera
-                for task in self.ready_queue:
-                    if not task.completed:
-                        self.wait_map.setdefault(task.id, []).append(self.time)
-                self.running_task = None
-                return
-            
-            self.running_task.remaining_time -= 1
-            self.running_task.executed_ticks += 1
-            self.running_task.executed_count += 1
+            # CRITÉRIO 3.6: Se tarefa está iniciando execução (elapsed_time==0),
+            # processa eventos de t=0 ANTES de incrementar
+            if self.running_task.elapsed_time == 0:
+                # Processa eventos de IO para t=0
+                self._process_io_events(self.running_task)
+                
+                # Se tarefa ficou bloqueada por IO em t=0, não executa CPU este tick
+                if self.running_task.io_blocked:
+                    self.timeline.append(None)
+                    if self.running_task not in self.ready_queue and not self.running_task.completed:
+                        self.ready_queue.append(self.running_task)
+                    for task in self.ready_queue:
+                        if not task.completed:
+                            self.wait_map.setdefault(task.id, []).append(self.time)
+                    self.running_task = None
+                    return
+                
+                # Processa eventos de mutex para t=0
+                self._process_mutex_events(self.running_task)
+                
+                # Se tarefa ficou bloqueada por mutex em t=0, não executa CPU este tick
+                if self.running_task.blocked:
+                    self.timeline.append(None)
+                    if self.running_task not in self.ready_queue and not self.running_task.completed:
+                        self.ready_queue.append(self.running_task)
+                    for task in self.ready_queue:
+                        if not task.completed:
+                            self.wait_map.setdefault(task.id, []).append(self.time)
+                    self.running_task = None
+                    return
+                
+                # AGORA incrementa elapsed_time para 1 e executa CPU
+                self.running_task.elapsed_time += 1
+                self.running_task.remaining_time -= 1
+                self.running_task.executed_ticks += 1
+                self.running_task.executed_count += 1
+            else:
+                # Para execuções subsequentes, incrementa ANTES de processar
+                self.running_task.elapsed_time += 1
+                
+                # Processa eventos de IO
+                self._process_io_events(self.running_task)
+                
+                # Se tarefa ficou bloqueada por IO, não executa CPU este tick
+                if self.running_task.io_blocked:
+                    self.timeline.append(None)  # CPU ociosa por bloqueio de IO
+                    # Readiciona tarefa à fila de prontos
+                    if self.running_task not in self.ready_queue and not self.running_task.completed:
+                        self.ready_queue.append(self.running_task)
+                    # Tarefa bloqueada também registra espera
+                    for task in self.ready_queue:
+                        if not task.completed:
+                            self.wait_map.setdefault(task.id, []).append(self.time)
+                    self.running_task = None
+                    return
+                
+                # Executa a tarefa (decrementa remaining_time)
+                self.running_task.remaining_time -= 1
+                self.running_task.executed_ticks += 1
+                self.running_task.executed_count += 1
+                
+                # APÓS iniciar/executar a tarefa, processa eventos de mutex
+                self._process_mutex_events(self.running_task)
+                
+                # Se tarefa ficou bloqueada por mutex, não continua
+                if self.running_task.blocked:
+                    self.timeline.append(None)  # CPU ociosa por bloqueio de mutex
+                    # Readiciona tarefa à fila de prontos
+                    if self.running_task not in self.ready_queue and not self.running_task.completed:
+                        self.ready_queue.append(self.running_task)
+                    # Tarefa bloqueada também registra espera
+                    for task in self.ready_queue:
+                        if not task.completed:
+                            self.wait_map.setdefault(task.id, []).append(self.time)
+                    self.running_task = None
+                    return
             
             # Adiciona ID à timeline, com marcação se foi sorteio
             task_id = self.running_task.id
@@ -400,7 +438,7 @@ class Simulator:
                 # Rotaciona tarefa e deixa a "CPU" livre
                 self.ready_queue.append(self.running_task)
                 self.running_task.executed_count = 0
-                # self.running_task = None
+                self.running_task = None
         else:
             # CPU ociosa
             self.timeline.append(None)
@@ -411,6 +449,9 @@ class Simulator:
     def _process_io_events(self, task):
         """Processa eventos de IO para uma tarefa em execução.
         
+        Critério 3.4: Uma ação de E/S dura yy ticks. Quando termina, gera IRQ
+        no instante imediatamente depois do término.
+        
         Tempo relativo (elapsed_time) determina qual evento disparar.
         Quando IO é iniciado:
         - Marca tarefa como io_blocked=True
@@ -418,7 +459,7 @@ class Simulator:
         
         Cada tick enquanto io_bloqueada:
         - Decrementa io_remaining
-        - Quando io_remaining==0, desbloqueia tarefa
+        - Quando io_remaining==0, desbloqueia tarefa e gera IRQ
         """
         # Se tarefa já está bloqueada por IO, decrementa contador
         if task.io_blocked:
@@ -426,19 +467,24 @@ class Simulator:
             if task.io_remaining <= 0:
                 task.io_blocked = False
                 task.io_remaining = 0
-                print(f"Tarefa {task.id} desbloqueada de IO em t={self.time}")
+                # CRITÉRIO 3.4: IRQ gerada no instante imediatamente depois do término
+                print(f"[IRQ] Tarefa {task.id} completou IO - interrupção gerada em t={self.time}")
                 # Readiciona à fila se não estiver lá
                 if task not in self.ready_queue and not task.completed:
                     self.ready_queue.append(task)
             return
         
         # Procura por IO events que começam neste tempo relativo
+        # CRITÉRIO 3.3: Tempo relativo ao início da tarefa
         pending_io = task.get_pending_io(task.elapsed_time)
         if pending_io:
             # Inicia novo IO
             task.io_blocked = True
             task.io_remaining = pending_io["duration"]
-            print(f"Tarefa {task.id} iniciando IO com duração {pending_io['duration']} em t={self.time}")
+            # CRITÉRIO 3.2: Formato IO:xx-yy onde yy é duração
+            print(f"[IO START] Tarefa {task.id} iniciando E/S (duração={pending_io['duration']} ticks) em t={self.time}")
+
+
 
     def _process_mutex_events(self, task):
         """Processa eventos de lock/unlock para uma tarefa em execução.

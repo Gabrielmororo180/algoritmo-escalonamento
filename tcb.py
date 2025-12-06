@@ -73,7 +73,9 @@ class TaskControlBlock:
         return [e for e in self.events if e.get("time") == current_time]
     
     def get_pending_io(self, current_time):
-        """Retorna eventos de IO que devem iniciar no tempo atual.
+        """Retorna PRIMEIRO evento de IO que deve iniciar no tempo atual.
+        
+        DEPRECATED: use get_pending_ios() em vez disso para suportar múltiplos IOs.
         
         Args:
             current_time (int): tempo decorrido desde o início da execução
@@ -85,6 +87,19 @@ class TaskControlBlock:
             if io_event.get("time") == current_time:
                 return io_event
         return None
+    
+    def get_pending_ios(self, current_time):
+        """Retorna TODOS os eventos de IO que devem iniciar no tempo atual.
+        
+        Mantém ordem de aparição no arquivo de configuração (critério 3.5).
+        
+        Args:
+            current_time (int): tempo decorrido desde o início da execução
+            
+        Returns:
+            list: eventos de IO que iniciam neste tick, em ordem
+        """
+        return [io_event for io_event in self.io_events if io_event.get("time") == current_time]
     
     def __repr__(self):
         status = "BLOCKED" if self.blocked else "IO_BLOCKED" if self.io_blocked else "RUNNING" if not self.completed else "DONE"
