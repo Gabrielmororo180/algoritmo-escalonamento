@@ -3,8 +3,11 @@
 Responsável por carregar e validar o arquivo de configuração simples da simulação.
 
 Formato esperado:
-Primeira linha:
-    algoritmo;quantum
+Primeira linha (algoritmos atuais):
+    FIFO;quantum
+    SRTF;quantum
+    PRIOP;quantum
+    PRIOPEnv;quantum;alpha
 Linhas seguintes:
     id;cor;ingresso;duracao;prioridade;lista_eventos
 
@@ -190,10 +193,19 @@ def load_config(filename):
     except ValueError:
         quantum = DEFAULTS['quantum']
 
+    # Alpha para PRIOPEnv (preemptivo com envelhecimento)
+    alpha = 0
+    if algorithm.upper() == "PRIOPENV":
+        try:
+            alpha = int(header[2]) if len(header) > 2 and header[2] else 0
+        except ValueError:
+            alpha = 0
+
     tasks = [parse_task_line(line) for line in lines[1:]]
 
     return {
         "algorithm": algorithm,
         "quantum": quantum,
+        "alpha": alpha,
         "tasks": tasks
     }

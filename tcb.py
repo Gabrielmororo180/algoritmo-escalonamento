@@ -30,7 +30,10 @@ class TaskControlBlock:
         self.color = color
         self.arrival = arrival
         self.duration = duration
-        self.priority = priority
+        # Prioridade estática (pe) e dinâmica (pd)
+        self.priority = priority  # manter compatibilidade: pe
+        self.static_priority = priority
+        self.dynamic_priority = priority
         
         # Eventos de mutex: lista de {type, mutex_id, time}
         self.events = events if events else []
@@ -82,4 +85,4 @@ class TaskControlBlock:
     
     def __repr__(self):
         status = "BLOCKED" if self.blocked else "IO_BLOCKED" if self.io_blocked else "RUNNING" if not self.completed else "DONE"
-        return f"TCB({self.id}, {status}, remaining={self.remaining_time})"
+        return f"TCB({self.id}, {status}, remaining={self.remaining_time}, pe={self.static_priority}, pd={self.dynamic_priority})"

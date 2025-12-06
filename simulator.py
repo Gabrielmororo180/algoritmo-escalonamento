@@ -41,6 +41,7 @@ class Simulator:
         diferentes fontes (arquivo, CLI, GUI) sem acoplamento a tipos.
         """
         self.quantum = config["quantum"]
+        self.alpha = config.get("alpha", 0)
         self.algorithm_name = config["algorithm"]
         self.scheduler = get_scheduler(config["algorithm"])
         self.time = 0
@@ -144,6 +145,9 @@ class Simulator:
             task.elapsed_time = 0
             task.io_blocked = False
             task.io_remaining = 0
+            # Reinicia prioridades dinâmicas
+            if hasattr(task, 'static_priority'):
+                task.dynamic_priority = task.static_priority
         
         # Reinicializa mutexes
         self._initialize_mutexes()
@@ -230,6 +234,9 @@ class Simulator:
                 self.ready_queue.append(task)
                 # registra chegada
                 self.arrivals_map.setdefault(task.id, self.time)
+                # Para PRIOPEnv, pdnova <- penova
+                if hasattr(task, 'static_priority'):
+                    task.dynamic_priority = task.static_priority
 
     def _schedule(self):
         """Realiza escalonamento: escolhe próxima tarefa ou verifica preempção.
@@ -241,18 +248,33 @@ class Simulator:
         if not self.running_task or self.running_task.remaining_time <= 0:
             # Filtra tarefas não bloqueadas (nem mutex nem IO)
             available = [t for t in self.ready_queue if not t.blocked and not t.io_blocked]
-            self.running_task = self.scheduler(available)
+            # PRIOPEnv aceita (ready_queue, current)
+            if self.algorithm_name.upper() == "PRIOPENV":
+                self.running_task = self.scheduler(available, current=self.running_task)
+            else:
+                self.running_task = self.scheduler(available)
             if self.running_task:
                 self.running_task.executed_count = 0
                 # Remove da fila pois agora está em execução
                 if self.running_task in self.ready_queue:
                     self.ready_queue.remove(self.running_task)
+                # Envelhecimento: para PRIOPEnv, após escolher tprox
+                if self.algorithm_name.upper() == "PRIOPENV":
+                    for t in available:
+                        if t is not self.running_task:
+                            t.dynamic_priority = t.dynamic_priority + self.alpha
+                    # tprox rejuvenesce
+                    self.running_task.dynamic_priority = self.running_task.static_priority
             return
 
         # Preempção para SRTF e PRIOP (têm should_preempt)
         if hasattr(self.scheduler, 'should_preempt'):
             available = [t for t in self.ready_queue if not t.blocked and not t.io_blocked]
-            candidate = self.scheduler(available)
+            # PRIOPEnv precisa considerar tarefa atual para desempate
+            if self.algorithm_name.upper() == "PRIOPENV":
+                candidate = self.scheduler(available, current=self.running_task)
+            else:
+                candidate = self.scheduler(available)
             if candidate and candidate is not self.running_task:
                 if self.scheduler.should_preempt(self.running_task, candidate):
                     # Preempção confirmada: volta tarefa atual à fila
@@ -263,6 +285,13 @@ class Simulator:
                     if candidate in self.ready_queue:
                         self.ready_queue.remove(candidate)
                     self.running_task = candidate
+                    # Envelhecimento ao promover candidata
+                    if self.algorithm_name.upper() == "PRIOPENV":
+                        for t in available:
+                            if t is not self.running_task:
+                                t.dynamic_priority = t.dynamic_priority + self.alpha
+                        # tprox rejuvenesce
+                        self.running_task.dynamic_priority = self.running_task.static_priority
 
 
 
