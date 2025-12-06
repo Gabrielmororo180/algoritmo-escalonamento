@@ -39,7 +39,7 @@ class TaskEditorApp:
         self.debug_current_index = -1  # Índice atual na história    
 
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
-        self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP"], state="readonly", width=18)
+        self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP", "PRIOPENV"], state="readonly", width=18)
         self.algorithm_cb.grid(row=0, column=1, pady=2)
         self.algorithm_cb.set("FIFO")
 
@@ -47,6 +47,12 @@ class TaskEditorApp:
         self.quantum_entry = tk.Entry(root, width=6)
         self.quantum_entry.grid(row=0, column=3)
         self.quantum_entry.insert(0, "3")
+        
+        tk.Label(root, text="Alpha").grid(row=0, column=4, sticky="e")
+        self.alpha_entry = tk.Entry(root, width=6)
+        self.alpha_entry.grid(row=0, column=5)
+        self.alpha_entry.insert(0, "0")
+        
         self.fields = {}
 
         
@@ -255,6 +261,8 @@ class TaskEditorApp:
             self.algorithm_cb.set(config["algorithm"])
             self.quantum_entry.delete(0, tk.END)
             self.quantum_entry.insert(0, str(config["quantum"]))
+            self.alpha_entry.delete(0, tk.END)
+            self.alpha_entry.insert(0, str(config.get("alpha", 0)))
 
             # NÃO limpa a tabela existente - apenas adiciona novas tarefas
             # self.tree.delete(*self.tree.get_children())
@@ -408,14 +416,15 @@ class TaskEditorApp:
         algorithm = self.algorithm_cb.get()
         try:
             quantum = int(self.quantum_entry.get())
+            alpha = int(self.alpha_entry.get())
         except ValueError:
-            messagebox.showerror("Erro", "Quantum deve ser um número inteiro.")
+            messagebox.showerror("Erro", "Quantum e Alpha devem ser números inteiros.")
             return
 
         try:
             self.save_to_file()
             with open("sample_config.txt", "w") as f:
-                f.write(f"{algorithm};{quantum}\n")
+                f.write(f"{algorithm};{quantum};{alpha}\n")
                 for task in self.tasks:
                     # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""
@@ -484,15 +493,16 @@ class TaskEditorApp:
         algorithm = self.algorithm_cb.get()
         try:
             quantum = int(self.quantum_entry.get())
+            alpha = int(self.alpha_entry.get())
         except ValueError:
-            messagebox.showerror("Erro", "Quantum deve ser um número inteiro.")
+            messagebox.showerror("Erro", "Quantum e Alpha devem ser números inteiros.")
             return
 
         filepath = "sample_config.txt"
       
         try:
             with open(filepath, "w") as f:
-                f.write(f"{algorithm};{quantum}\n")
+                f.write(f"{algorithm};{quantum};{alpha}\n")
                 for task in self.tasks:
                     # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""

@@ -59,6 +59,9 @@ class Simulator:
         self.arrivals_map = {}
         self.finish_map = {}
         self.debug_mode = False
+        
+        # Flag para envelhecimento: marca se houve nova tarefa ou preempção
+        self.queue_changed = False
 
         # Pool de mutexes: mapeamento de mutex_id -> objeto Mutex
         self.mutexes = {}
@@ -115,9 +118,18 @@ class Simulator:
         """
         print(f"Iniciando simulação com algoritmo: {self.algorithm_name}")
         while not self.all_tasks_completed() and self.time < self.tick_limit:
-            self._check_arrivals()  
-            self._schedule()        
+            self.queue_changed = False  # Reseta flag a cada iteração
+            self._check_arrivals()
+            if self.queue_changed or not self.running_task:
+                self._schedule()  
             self._tick()
+            
+            # Envelhecimento: APÓS execução do tick, apenas se houve mudança na fila
+            # (nova tarefa chegou ou preempção ocorreu)
+            if self.queue_changed and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
+                for task in self.ready_queue:
+                    if task is not self.running_task and not task.completed:
+                        task.dynamic_priority += self.alpha
             
             self.time += 1
         print("Simulação encerrada.")
@@ -228,6 +240,8 @@ class Simulator:
     def _check_arrivals(self):
         """Move tarefas cujo tempo de chegada == tempo atual para a ready_queue.
         Armazena instante em `arrivals_map` se ainda não registrado.
+        
+        Define flag `queue_changed` se nova tarefa chegou.
         """
         for task in self.tasks:
             if task.arrival == self.time and task not in self.ready_queue and not task.completed:
@@ -237,6 +251,9 @@ class Simulator:
                 # Para PRIOPEnv, pdnova <- penova
                 if hasattr(task, 'static_priority'):
                     task.dynamic_priority = task.static_priority
+                # Marca que fila mudou (nova tarefa chegou)
+                self.queue_changed = True
+                task.dynamic_priority = task.static_priority
 
     def _schedule(self):
         """Realiza escalonamento: escolhe próxima tarefa ou verifica preempção.
@@ -258,13 +275,10 @@ class Simulator:
                 # Remove da fila pois agora está em execução
                 if self.running_task in self.ready_queue:
                     self.ready_queue.remove(self.running_task)
-                # Envelhecimento: para PRIOPEnv, após escolher tprox
+                # Rejuvenação: reseta prioridade dinâmica ao começar execução
                 if self.algorithm_name.upper() == "PRIOPENV":
-                    for t in available:
-                        if t is not self.running_task:
-                            t.dynamic_priority = t.dynamic_priority + self.alpha
-                    # tprox rejuvenesce
                     self.running_task.dynamic_priority = self.running_task.static_priority
+            self.queue_changed = True        
             return
 
         # Preempção para SRTF e PRIOP (têm should_preempt)
@@ -285,13 +299,10 @@ class Simulator:
                     if candidate in self.ready_queue:
                         self.ready_queue.remove(candidate)
                     self.running_task = candidate
-                    # Envelhecimento ao promover candidata
+                    # Rejuvenação: reseta prioridade dinâmica ao começar execução
                     if self.algorithm_name.upper() == "PRIOPENV":
-                        for t in available:
-                            if t is not self.running_task:
-                                t.dynamic_priority = t.dynamic_priority + self.alpha
-                        # tprox rejuvenesce
                         self.running_task.dynamic_priority = self.running_task.static_priority
+                    
 
 
 
@@ -352,7 +363,13 @@ class Simulator:
             self.running_task.executed_ticks += 1
             self.running_task.executed_count += 1
             
-            self.timeline.append(self.running_task.id)
+            # Adiciona ID à timeline, com marcação se foi sorteio
+            task_id = self.running_task.id
+            if hasattr(self.running_task, '_tie_break_random') and self.running_task._tie_break_random:
+                task_id = task_id + "L"  # "L" indica escolha por sorteio (Lottery)
+                self.running_task.chosen_by_lottery = True
+            
+            self.timeline.append(task_id)
             # Marca espera das demais tarefas na fila
             for task in self.ready_queue:
                 if task is not self.running_task and not task.completed:
@@ -371,7 +388,7 @@ class Simulator:
                 # Rotaciona tarefa e deixa a "CPU" livre
                 self.ready_queue.append(self.running_task)
                 self.running_task.executed_count = 0
-                self.running_task = None
+                # self.running_task = None
         else:
             # CPU ociosa
             self.timeline.append(None)

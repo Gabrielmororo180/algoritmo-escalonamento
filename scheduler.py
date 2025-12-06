@@ -74,7 +74,6 @@ def priority_preemptive_aging_scheduler(ready_queue, current=None):
         if hasattr(best, '_tie_break_random'):
             delattr(best, '_tie_break_random')
     return best
-
 # should_preempt para PRIOPEnv: preempção se candidato tem pd maior, aplicando desempates
 def _priopenv_should_preempt(current, candidate):
     if not current or not candidate:

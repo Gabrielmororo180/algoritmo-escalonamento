@@ -57,6 +57,9 @@ class TaskControlBlock:
         
         # Tempo relativo desde que começou a executar (para rastrear eventos)
         self.elapsed_time = 0
+        
+        # Marcar se foi escolhida por sorteio (para Gantt)
+        self.chosen_by_lottery = False
     
     def get_pending_events(self, current_time):
         """Retorna eventos de mutex que devem acontecer no tempo atual.
