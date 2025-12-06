@@ -190,6 +190,7 @@ class Simulator:
                 "duration": t.duration,
                 "remaining": t.remaining_time,
                 "priority": t.priority,
+                "dynamic_priority": getattr(t, 'dynamic_priority', t.priority),  # Para PRIOPENV
                 "completed": t.completed,
                 "executed_ticks": t.executed_ticks,
                 "waited_ticks": len(self.wait_map.get(t.id, [])),
@@ -221,9 +222,20 @@ class Simulator:
         if self.all_tasks_completed() or self.time >= self.tick_limit:
             return False 
 
-        self._check_arrivals()  
-        self._schedule()        
+        self.queue_changed = False  # Reseta flag a cada iteração
+        self._check_arrivals()
+        if self.queue_changed or not self.running_task:
+            self._schedule()  
         self._tick()
+            
+            # Envelhecimento: APÓS execução do tick, apenas se houve mudança na fila
+            # (nova tarefa chegou ou preempção ocorreu)
+        if self.queue_changed and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
+                for task in self.ready_queue:
+                    if task is not self.running_task and not task.completed:
+                        task.dynamic_priority += self.alpha
+            
+        
         if self.debug_mode:
             snap = self.snapshot()
             print(f"[Tick {self.time}] EXEC: {snap['running']} | READY: {snap['ready_queue']} | QUANTUM={self.quantum}")

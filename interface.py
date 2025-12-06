@@ -537,14 +537,15 @@ class TaskEditorApp:
         algorithm = self.algorithm_cb.get()
         try:
             quantum = int(self.quantum_entry.get())
+            alpha = int(self.alpha_entry.get())
         except ValueError:
-            messagebox.showerror("Erro", "Quantum inválido.")
+            messagebox.showerror("Erro", "Quantum e Alpha devem ser números inteiros.")
             return
 
         # Salvar arquivo e carregar simulador
         try:
             with open("sample_config.txt", "w") as f:
-                f.write(f"{algorithm};{quantum}\n")
+                f.write(f"{algorithm};{quantum};{alpha}\n")
                 for task in self.tasks:
                     # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""
@@ -708,13 +709,14 @@ class TaskEditorApp:
         lines.append(f"Rodando: {snap['running'] or 'IDLE'}")
         lines.append(f"Fila de Prontos: {', '.join(snap['ready_queue']) if snap['ready_queue'] else '(vazia)'}")
         lines.append("\nTarefas:")
-        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4} {'Bloq':>4} {'IO':>5}"
+        header = f"{'ID':<4} {'Arr':>3} {'Dur':>3} {'Rem':>3} {'Prio':>4} {'Dyn':>4} {'Exec':>4} {'Waits':>5} {'W?':>3} {'Done':>4} {'Bloq':>4} {'IO':>5}"
         lines.append(header)
         lines.append('-' * len(header))
         for t in snap['tasks']:
             blocked_str = f"M{t['blocking_mutex_id']}" if t['blocked'] else 'N'
             io_str = f"{t['io_remaining']}t" if t['io_blocked'] else 'N'
-            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4} {blocked_str:>4} {io_str:>5}")
+            dyn_prio = t.get('dynamic_priority', t['priority'])
+            lines.append(f"{t['id']:<4} {t['arrival']:>3} {t['duration']:>3} {t['remaining']:>3} {t['priority']:>4} {dyn_prio:>4} {t['executed_ticks']:>4} {t['waited_ticks']:>5} {'Y' if t['waiting_now'] else 'N':>3} {'Y' if t['completed'] else 'N':>4} {blocked_str:>4} {io_str:>5}")
         
         # Adiciona eventos de cada tarefa
         lines.append("\nEventos de Tarefas:")
@@ -768,9 +770,10 @@ class TaskEditorApp:
         
         temp = TempSimulator()
         temp.timeline = snap['timeline']
-        temp.arrivals_map = snap.get('arrivals_map', {})
-        temp.finish_map = snap.get('finish_map', {})
-        temp.wait_map = snap.get('wait_map', {})
+        # Pega arrivals_map e finish_map do simulador real, não do snapshot
+        temp.arrivals_map = self.simulator.arrivals_map
+        temp.finish_map = self.simulator.finish_map
+        temp.wait_map = self.simulator.wait_map
         temp.task_colors = getattr(self.simulator, 'task_colors', {})
         
         self.render_gantt_in_frame(temp)
@@ -823,8 +826,19 @@ class TaskEditorApp:
         
         # Renderizar gráfico
         total_time = len(timeline)
-        # Extrair IDs únicos de tarefas (são strings)
-        tasks = sorted({str(t) for t in timeline if t is not None and t != 'IDLE'})
+        # Extrair IDs únicos de tarefas: remove marcações como "T1L" e None
+        # Extrai apenas a parte base do ID (ex: "T1L" -> "T1")
+        task_ids = set()
+        for t in timeline:
+            if t is not None and t != 'IDLE':
+                # Remove qualquer sufixo depois do ID (como "L" de sorteio)
+                base_id = ''.join(c for c in str(t) if c.isalnum() or c == 'T')
+                # Limpa para pegar só a parte T#
+                import re
+                match = re.match(r'(T\d+)', str(t))
+                if match:
+                    task_ids.add(match.group(1))
+        tasks = sorted(task_ids)
         
         if not tasks:
             ax.text(0.5, 0.5, 'Nenhuma tarefa executada', ha='center', va='center')
@@ -847,7 +861,9 @@ class TaskEditorApp:
                 intervals = []
                 s = None
                 for t, cur in enumerate(timeline):
-                    if cur == task:
+                    # Remove o sufixo "L" (sorteio) para comparar IDs base
+                    cur_base = str(cur).rstrip('L') if cur else None
+                    if cur_base == task:
                         if s is None:
                             s = t
                     else:
