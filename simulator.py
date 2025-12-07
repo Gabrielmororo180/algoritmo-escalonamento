@@ -205,6 +205,7 @@ class Simulator:
                 "dynamic_priority": getattr(t, 'dynamic_priority', t.priority),  # Para PRIOPENV
                 "completed": t.completed,
                 "executed_ticks": t.executed_ticks,
+                "elapsed_time": t.elapsed_time,
                 "waited_ticks": len(self.wait_map.get(t.id, [])),
                 "waiting_now": (t in self.ready_queue and t is not self.running_task and not t.completed),
                 "blocked": t.blocked,
@@ -293,12 +294,10 @@ class Simulator:
         TUDO acontece FORA do _tick().
         """
         for task in list(self.ready_queue):
-            # Incrementa elapsed_time para tarefas bloqueadas (IO ou mutex)
-            if task.io_blocked or task.blocked:
-                task.elapsed_time += 1
-            
             # Se está bloqueada por IO
             if task.io_blocked:
+                # Incrementa elapsed_time para rastrear tempo desde chegada
+                task.elapsed_time += 1
                 task.io_remaining -= 1
                 if task.io_remaining > 0:
                     # Ainda está em IO, registra como suspenso
@@ -311,20 +310,9 @@ class Simulator:
             
             # Se está bloqueada por mutex
             elif task.blocked:
-                # Processa eventos de mutex (unlock) para tarefa bloqueada
-                self._process_mutex_events(task)
-                
-                # Verifica se a tarefa foi promovida para o lock
-                mutex = self.mutexes.get(task.blocking_mutex_id)
-                if mutex and mutex.is_owner(task.id):
-                    # Tarefa foi promovida para o lock, desbloqueia
-                    task.blocked = False
-                    task.blocking_mutex_id = None
-                    self.needs_reschedule = True
-                    print(f"[PRE-TICK] Tarefa {task.id} adquiriu M{mutex.id} e foi desbloqueada em t={self.time}")
-                else:
-                    # Ainda esperando
-                    self.suspended_map.setdefault(task.id, []).append(self.time)
+                # Tarefas bloqueadas TAMBÉM incrementam elapsed_time para rastrear tempo esperando
+                task.elapsed_time += 1
+                self.suspended_map.setdefault(task.id, []).append(self.time)
 
 
 
@@ -433,6 +421,28 @@ class Simulator:
             else:
                 # Para execuções subsequentes, processa eventos ANTES de incrementar
                 # (eventos são relativos ao tempo atual de execução)
+                # IMPORTANTE: Processa MUTEX PRIMEIRO para liberar recursos antes de IO
+                self._process_mutex_events(self.running_task)
+                
+                # Se tarefa ficou bloqueada por mutex, não executa CPU este tick
+                if self.running_task.blocked:
+                    # Readiciona tarefa à fila de prontos
+                    if self.running_task not in self.ready_queue and not self.running_task.completed:
+                        self.ready_queue.append(self.running_task)
+                    # Tarefa bloqueada também registra espera
+                    for task in self.ready_queue:
+                        if not task.completed:
+                            self.wait_map.setdefault(task.id, []).append(self.time)
+                    self.running_task = None
+                    # Reschedule: escolher próxima tarefa disponível
+                    self._schedule()
+                    if not self.running_task:
+                        # Nenhuma tarefa - CPU ociosa
+                        self.timeline.append(None)
+                    # Se conseguiu, deixa continuar para executar
+                    return
+                
+                # Depois processa IO
                 self._process_io_events(self.running_task)
                 
                 # Se tarefa ficou bloqueada por IO, não executa CPU este tick
@@ -495,27 +505,6 @@ class Simulator:
                 self.running_task.remaining_time -= 1
                 self.running_task.executed_ticks += 1
                 self.running_task.executed_count += 1
-                
-                # APÓS iniciar/executar a tarefa, processa eventos de mutex
-                self._process_mutex_events(self.running_task)
-                
-                # Se tarefa ficou bloqueada por mutex, não continua
-                if self.running_task.blocked:
-                    # Readiciona tarefa à fila de prontos
-                    if self.running_task not in self.ready_queue and not self.running_task.completed:
-                        self.ready_queue.append(self.running_task)
-                    # Tarefa bloqueada também registra espera
-                    for task in self.ready_queue:
-                        if not task.completed:
-                            self.wait_map.setdefault(task.id, []).append(self.time)
-                    self.running_task = None
-                    # Reschedule: escolher próxima tarefa disponível
-                    self._schedule()
-                    if not self.running_task:
-                        # Nenhuma tarefa - CPU ociosa
-                        self.timeline.append(None)
-                    # Se conseguiu, deixa continuar para executar
-                    return
                 
                 # Incrementa elapsed_time APÓS processar eventos e executar CPU
                 self.running_task.elapsed_time += 1
@@ -604,10 +593,16 @@ class Simulator:
                 if mutex:
                     next_task_id = mutex.unlock(task.id)
                     print(f"Tarefa {task.id} liberou M{mutex_id}")
-                    # Se há tarefa esperando, ela será promovida e desbloqueada em _check_suspension_exits()
+                    # Se há tarefa esperando, desbloqueia AGORA
                     if next_task_id:
-                        self.needs_reschedule = True
-                        print(f"Tarefa {next_task_id} promovida para M{mutex_id}")
+                        # Encontra a tarefa promovida e desbloqueia
+                        for t in self.tasks:
+                            if t.id == next_task_id and t.blocked and t.blocking_mutex_id == mutex_id:
+                                t.blocked = False
+                                t.blocking_mutex_id = None
+                                self.needs_reschedule = True
+                                print(f"[UNLOCK] Tarefa {next_task_id} desbloqueada - adquiriu M{mutex_id}")
+                                break
 
 
     def all_tasks_completed(self):

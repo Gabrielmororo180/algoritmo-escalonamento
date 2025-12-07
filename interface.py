@@ -89,7 +89,7 @@ class TaskEditorApp:
         self.fields["cor"].set("Vermelho")
         self.fields["cor"].bind("<<ComboboxSelected>>", self.update_color_preview)
         
-        # Preview da cor
+      
         self.color_preview = tk.Canvas(cor_frame, width=30, height=30, bg="#FF0000", relief="solid", borderwidth=1)
         self.color_preview.pack(side=tk.LEFT, padx=5)
 
@@ -99,21 +99,21 @@ class TaskEditorApp:
             entry.grid(row=i+2, column=1, pady=2, columnspan=3, sticky="w")
             self.fields[label.lower()] = entry
 
-        # Campo de eventos (mutex)
+        
         tk.Label(root, text="Eventos").grid(row=5, column=0, sticky="ne")
         eventos_entry = tk.Entry(root, width=20)
         eventos_entry.grid(row=5, column=1, pady=2, columnspan=3, sticky="w")
         self.fields["eventos"] = eventos_entry
         tk.Label(root, text="(ex: ML1:2,MU1:5)", font=('Arial', 8), fg='gray').grid(row=5, column=4, sticky="w")
 
-        # Campo de eventos de IO
+       
         tk.Label(root, text="IO Eventos").grid(row=6, column=0, sticky="ne")
         io_eventos_entry = tk.Entry(root, width=20)
         io_eventos_entry.grid(row=6, column=1, pady=2, columnspan=3, sticky="w")
         self.fields["io_eventos"] = io_eventos_entry
         tk.Label(root, text="(ex: IO2-5,IO10-3)", font=('Arial', 8), fg='gray').grid(row=6, column=4, sticky="w")
 
-        # Frame único para todos os botões em uma linha
+       
         buttons_frame = tk.Frame(root)
         buttons_frame.grid(row=7, column=0, columnspan=5, sticky='w', pady=8)
 
@@ -129,16 +129,16 @@ class TaskEditorApp:
         for i, (label, cmd) in enumerate(btn_specs):
             tk.Button(buttons_frame, text=label, command=cmd).grid(row=0, column=i, padx=4)
         
-        # Barra de ferramentas de Debug (inicialmente invisível)
+        
         self.debug_toolbar = tk.Frame(root, bd=2, relief='sunken', bg='#f0f0f0')
         self.debug_toolbar.grid(row=8, column=0, columnspan=5, sticky='ew', pady=5)
-        self.debug_toolbar.grid_remove()  # Invisível inicialmente
+        self.debug_toolbar.grid_remove()  
         
-        # Label de progresso
+        
         self.debug_progress_label = tk.Label(self.debug_toolbar, text='', bg='#f0f0f0', font=('Arial', 10, 'bold'))
         self.debug_progress_label.pack(side=tk.LEFT, padx=10, pady=5)
         
-        # Separador
+       
         ttk.Separator(self.debug_toolbar, orient='vertical').pack(side=tk.LEFT, fill='y', padx=5)
         
         # Botão Voltar Tick
@@ -210,10 +210,10 @@ class TaskEditorApp:
         )
         self.exit_debug_btn.pack(side=tk.LEFT, padx=5, pady=5)
 
-        # Lista de tarefas com ID visível
+        
         self.tree = ttk.Treeview(root, columns=["ID", "Cor", "Ingresso", "Duração", "Prioridade", "Eventos", "IO Eventos"], show="headings", height=8)
         
-        # Configurar colunas com larguras
+        
         col_widths = {
             "ID": 40,
             "Cor": 70,
@@ -264,23 +264,20 @@ class TaskEditorApp:
             self.alpha_entry.delete(0, tk.END)
             self.alpha_entry.insert(0, str(config.get("alpha", 0)))
 
-            # NÃO limpa a tabela existente - apenas adiciona novas tarefas
-            # self.tree.delete(*self.tree.get_children())
-            
-            # Se a tabela está vazia, começa do T1
+          
             if not self.tasks:
                 self.task_counter = 1
             else:
-                # Se já tem tarefas, continua a partir da próxima
+               
                 self.task_counter = len(self.tasks) + 1
 
             for task_dict in config["tasks"]:
                 task_id = f"T{self.task_counter}"
                 
-                # Processa eventos de mutex
+                
                 eventos_list = task_dict.get("events", [])
                 if isinstance(eventos_list, list) and eventos_list:
-                    # Reconstrói string a partir dos dicts
+                   
                     eventos_strs = []
                     for e in eventos_list:
                         event_type = "ML" if e.get("type") == "lock" else "MU"
@@ -426,11 +423,10 @@ class TaskEditorApp:
             with open("sample_config.txt", "w") as f:
                 f.write(f"{algorithm};{quantum};{alpha}\n")
                 for task in self.tasks:
-                    # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""
                     io_eventos = task[6] if len(task) > 6 else ""
                     
-                    # Combina eventos e io_eventos
+                    
                     all_events = eventos
                     if io_eventos:
                         all_events = f"{eventos},{io_eventos}" if eventos else io_eventos
@@ -442,10 +438,10 @@ class TaskEditorApp:
             self.simulator = Simulator(config)
             self.simulator.run()
             
-            # Renderiza gráfico Gantt no frame
+           
             self.render_gantt_in_frame(self.simulator)
             
-            # Mostra snapshot final em um painel de debug
+          
             self._show_final_snapshot()
             
         except Exception as e:
@@ -456,7 +452,7 @@ class TaskEditorApp:
         if not hasattr(self, 'simulator'):
             return
         
-        # Cria/limpa painel de estado
+        
         if not hasattr(self, 'debug_frame'):
             self.debug_frame = tk.Frame(self.root, bd=2, relief='groove')
             self.debug_frame.grid(row=10, column=0, columnspan=5, sticky='we', pady=5)
@@ -466,10 +462,10 @@ class TaskEditorApp:
         else:
             self.debug_text.delete('1.0', tk.END)
         
-        # Obtém snapshot final
+        
         snap = self.simulator.snapshot()
         
-        # Usa a mesma função de renderização do debug
+       
         self.update_debug_snapshot_from_data(snap)
 
 
@@ -504,11 +500,10 @@ class TaskEditorApp:
             with open(filepath, "w") as f:
                 f.write(f"{algorithm};{quantum};{alpha}\n")
                 for task in self.tasks:
-                    # Incluir eventos (6º elemento) e io_eventos (7º elemento) se existirem
                     eventos = task[5] if len(task) > 5 else ""
                     io_eventos = task[6] if len(task) > 6 else ""
                     
-                    # Combina eventos e io_eventos
+                   
                     all_events = eventos
                     if io_eventos:
                         all_events = f"{eventos},{io_eventos}" if eventos else io_eventos
@@ -602,21 +597,20 @@ class TaskEditorApp:
             messagebox.showinfo("Pausado", "Debug está pausado. Clique em 'Pausar' novamente para retomar.")
             return
 
-        # Verifica se próximo passo já existe no histórico
+      
         if self.debug_current_index < len(self.debug_history) - 1:
-            # Já existe, apenas avança no histórico
+          
             self.debug_current_index += 1
             self.update_debug_display()
         else:
-            # Precisa calcular novo passo
-            # Se voltou e está em meio do histórico, reconstrói o simulador até aqui
+           
             if self.debug_current_index < len(self.debug_history) - 1:
                 self._rebuild_simulator_to_tick(self.debug_current_index)
             
-            # Executa próximo passo
+       
             tick_result = self.simulator.step()
             
-            # Salva o novo estado na história
+           
             new_snap = self.simulator.snapshot()
             self.debug_history.append(new_snap)
             self.debug_current_index += 1
@@ -635,7 +629,7 @@ class TaskEditorApp:
         self.simulator = Simulator(config)
         self.simulator.run_debug()
         
-        # Executa até o tick alvo
+       
         for _ in range(target_tick):
             self.simulator.step()
 
@@ -654,15 +648,15 @@ class TaskEditorApp:
             return
         
         snap = self.debug_history[self.debug_current_index]
-        
-        # Atualiza snapshot visual
+  
+       
         self.update_debug_snapshot_from_data(snap)
-        # Atualiza Gantt
+        
         self.update_debug_gantt_from_data(snap)
-        # Atualiza progresso
+     
         self.update_debug_progress_from_data(snap)
         
-        # Habilita/desabilita botões
+       
         self.prev_tick_btn.config(state=tk.NORMAL if self.debug_current_index > 0 else tk.DISABLED)
         self.next_tick_btn.config(state=tk.NORMAL if self.debug_current_index < len(self.debug_history) - 1 else tk.NORMAL)
 
@@ -814,22 +808,20 @@ class TaskEditorApp:
         for widget in self.gantt_frame.winfo_children():
             widget.destroy()
         
-        # Criar figura Matplotlib
+        
         fig = Figure(figsize=(10, 3), dpi=100)
         ax = fig.add_subplot(111)
-        
-        # Dados da simulação
+      
         timeline = simulator.timeline
         arrivals = simulator.arrivals_map
         finishes = simulator.finish_map
         wait_map = simulator.wait_map
-        suspended_map = simulator.suspended_map  # Ticks onde tarefas estão suspensas
+        suspended_map = simulator.suspended_map 
         task_colors = simulator.task_colors
         
-        # Renderizar gráfico
+       
         total_time = len(timeline)
-        # Extrair IDs únicos de tarefas: remove marcações como "T1L" e None
-        # Extrai apenas a parte base do ID (ex: "T1L" -> "T1")
+     
         task_ids = set()
         for t in timeline:
             if t is not None and t != 'IDLE':
