@@ -128,19 +128,20 @@ class Simulator:
             self._check_suspension_exits()  # Processa desbloqueios ANTES de rescalonar
             if self.queue_changed or not self.running_task or self.needs_reschedule:
                 self._schedule()
-                self.needs_reschedule = False  # Consome o flag
+                
             self._tick()
-            
+               # Processa desbloqueios ANTES de rescalonar
             # Envelhecimento: APÓS execução do tick, apenas se houve mudança na fila
             # (nova tarefa chegou ou preempção ocorreu)
             # Obs: tarefas bloqueadas (IO ou mutex) NÃO recebem envelhecimento
-            if self.queue_changed and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
+            if (self.needs_reschedule  or self.queue_changed) and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
                 for task in self.ready_queue:
                     if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
             
             # Reseta flag APÓS processar tudo (para não perder mudanças feitas em _tick)
             self.queue_changed = False
+            self.needs_reschedule = False 
             self.time += 1
         print("Simulação encerrada.")
         self.render_gantt_terminal(self.timeline, self.wait_map)
@@ -238,19 +239,20 @@ class Simulator:
         self._check_suspension_exits()  # Processa desbloqueios ANTES de rescalonar
         if self.queue_changed or not self.running_task or self.needs_reschedule:
             self._schedule()
-            self.needs_reschedule = False  # Consome o flag
+            
         self._tick()
             
             # Envelhecimento: APÓS execução do tick, apenas se houve mudança na fila
             # (nova tarefa chegou ou preempção ocorreu)
             # Obs: tarefas bloqueadas (IO ou mutex) NÃO recebem envelhecimento
-        if self.queue_changed and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
+        if (self.needs_reschedule or self.queue_changed) and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
                 for task in self.ready_queue:
                     if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
         
         # Reseta flag APÓS processar tudo
         self.queue_changed = False
+        self.needs_reschedule = False
             
         if self.debug_mode:
             snap = self.snapshot()
@@ -286,12 +288,12 @@ class Simulator:
     def _check_suspension_exits(self):
         """Processa desbloqueios de IO e mutex ANTES de rescalonar.
         
-        Decrementa contadores de suspensão para tarefas bloqueadas
-        e marca needs_reschedule = True quando desbloqueio completa.
-        Também incrementa elapsed_time das tarefas bloqueadas.
+        Decrementa contadores de suspensão para tarefas bloqueadas,
+        incrementa elapsed_time, processa eventos e marca needs_reschedule.
+        TUDO acontece FORA do _tick().
         """
         for task in list(self.ready_queue):
-            # Incrementa elapsed_time para tarefas bloqueadas
+            # Incrementa elapsed_time para tarefas bloqueadas (IO ou mutex)
             if task.io_blocked or task.blocked:
                 task.elapsed_time += 1
             
@@ -309,16 +311,22 @@ class Simulator:
             
             # Se está bloqueada por mutex
             elif task.blocked:
-                # Verifica se o mutex foi liberado por outra tarefa em tick anterior
+                # Processa eventos de mutex (unlock) para tarefa bloqueada
+                self._process_mutex_events(task)
+                
+                # Verifica se a tarefa foi promovida para o lock
                 mutex = self.mutexes.get(task.blocking_mutex_id)
-                if mutex and not mutex.is_locked():
+                if mutex and mutex.is_owner(task.id):
+                    # Tarefa foi promovida para o lock, desbloqueia
                     task.blocked = False
                     task.blocking_mutex_id = None
                     self.needs_reschedule = True
-                    print(f"[PRE-TICK] Tarefa {task.id} desbloqueada de M{mutex.id} em t={self.time}")
+                    print(f"[PRE-TICK] Tarefa {task.id} adquiriu M{mutex.id} e foi desbloqueada em t={self.time}")
                 else:
-                    # Registra ainda em suspensão
+                    # Ainda esperando
                     self.suspended_map.setdefault(task.id, []).append(self.time)
+
+
 
     def _schedule(self):
         """Realiza escalonamento: escolhe próxima tarefa ou verifica preempção.
@@ -367,6 +375,7 @@ class Simulator:
                     # Remove candidata da fila e promove
                     if candidate in self.ready_queue:
                         self.ready_queue.remove(candidate)
+                    candidate.executed_count = 0    
                     self.running_task = candidate
                     # Rejuvenação: reseta prioridade dinâmica ao começar execução
                     if self.algorithm_name.upper() == "PRIOPENV":
@@ -567,11 +576,11 @@ class Simulator:
 
 
     def _process_mutex_events(self, task):
-        """Processa eventos de lock/unlock para uma tarefa em execução.
+        """Processa eventos de lock/unlock para uma tarefa em execução ou bloqueada.
         
         Tempo relativo (elapsed_time) determina qual evento disparar.
         Lock: tenta adquirir; se falhar, marca tarefa como bloqueada.
-        Unlock: libera o mutex (desbloqueio é processado em _check_suspension_exits).
+        Unlock: libera o mutex e promove próxima tarefa bloqueada.
         """
         events = task.get_pending_events(task.elapsed_time)
         
@@ -595,7 +604,10 @@ class Simulator:
                 if mutex:
                     next_task_id = mutex.unlock(task.id)
                     print(f"Tarefa {task.id} liberou M{mutex_id}")
-                    # Desbloqueio da próxima tarefa será processado em _check_suspension_exits()
+                    # Se há tarefa esperando, ela será promovida e desbloqueada em _check_suspension_exits()
+                    if next_task_id:
+                        self.needs_reschedule = True
+                        print(f"Tarefa {next_task_id} promovida para M{mutex_id}")
 
 
     def all_tasks_completed(self):
