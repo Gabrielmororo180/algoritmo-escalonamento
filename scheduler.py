@@ -57,7 +57,7 @@ def priority_preemptive_aging_scheduler(ready_queue, current=None):
         is_current = 1 if (current is not None and t is current) else 0
         arrival = -getattr(t, 'arrival', 0)  # negativo para max favorecer menor arrival
         duration = -getattr(t, 'duration', 0)  # negativo para max favorecer menor duração
-        return (pd, pe, is_current, arrival, duration)
+        return (pd, pe, is_current, arrival, duration)  # ORDEM: pd > pe > is_current > arrival > duration
 
     # Em caso de empate completo, sorteia entre empatados e indica via atributo
     best = max(ready_queue, key=sort_key, default=None)

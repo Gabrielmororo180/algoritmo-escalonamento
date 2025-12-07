@@ -74,6 +74,10 @@ class Mutex:
         """Verifica se uma tarefa é a dona do lock."""
         return self.owner_id == task_id
     
+    def is_locked(self):
+        """Verifica se o mutex está atualmente bloqueado."""
+        return self.locked
+    
     def is_waiting(self, task_id):
         """Verifica se uma tarefa está na fila de espera."""
         return task_id in self.waiting_queue

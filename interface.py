@@ -774,6 +774,7 @@ class TaskEditorApp:
         temp.arrivals_map = self.simulator.arrivals_map
         temp.finish_map = self.simulator.finish_map
         temp.wait_map = self.simulator.wait_map
+        temp.suspended_map = self.simulator.suspended_map
         temp.task_colors = getattr(self.simulator, 'task_colors', {})
         
         self.render_gantt_in_frame(temp)
@@ -822,6 +823,7 @@ class TaskEditorApp:
         arrivals = simulator.arrivals_map
         finishes = simulator.finish_map
         wait_map = simulator.wait_map
+        suspended_map = simulator.suspended_map  # Ticks onde tarefas estão suspensas
         task_colors = simulator.task_colors
         
         # Renderizar gráfico
@@ -916,10 +918,38 @@ class TaskEditorApp:
                 if ws is not None:
                     wait_intervals.append((ws, end_time - ws))
                 
+                # Desenhar blocos de espera (branco)
                 for st, dur in wait_intervals:
                     if dur > 0:
                         ax.broken_barh([(st, dur)], (y_pos, 0.8),
                                       facecolors="white", edgecolors="black", linewidth=0.8)
+                
+                # Desenhar blocos de suspensão (cinza claro) - IO/mutex
+                suspended_ticks = set()
+                if suspended_map and task in suspended_map:
+                    suspended_ticks.update(suspended_map[task])
+                
+                suspend_intervals = []
+                ss = None
+                for t in range(start_time, end_time):
+                    if t in suspended_ticks and t not in exec_ticks:
+                        if ss is None:
+                            ss = t
+                    else:
+                        if ss is not None:
+                            suspend_intervals.append((ss, t - ss))
+                            ss = None
+                if ss is not None:
+                    suspend_intervals.append((ss, end_time - ss))
+                
+                for st, dur in suspend_intervals:
+                    if dur > 0:
+                        ax.broken_barh([(st, dur)], (y_pos, 0.8),
+                                      facecolors="#D3D3D3", edgecolors="black", linewidth=0.8)  # cinza claro
+                        # Add duration label
+                        mid_x = st + dur / 2
+                        ax.text(mid_x, y_pos + 0.4, f"{dur}", ha='center', va='center',
+                               fontsize=8, weight='bold', color='black')
             
             ax.set_xlabel("Tempo (t)")
             ax.set_ylabel("Tarefas")

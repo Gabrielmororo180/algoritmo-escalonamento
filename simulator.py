@@ -56,12 +56,16 @@ class Simulator:
        
 
         self.wait_map = {}
+        self.suspended_map = {}  # Rastreia ticks em que tarefas estão suspensas (IO/mutex)
         self.arrivals_map = {}
         self.finish_map = {}
         self.debug_mode = False
         
         # Flag para envelhecimento: marca se houve nova tarefa ou preempção
         self.queue_changed = False
+        
+        # Flag para rescalonamento: marca se precisa recalcular tarefa após suspensão
+        self.needs_reschedule = False
 
         # Pool de mutexes: mapeamento de mutex_id -> objeto Mutex
         self.mutexes = {}
@@ -117,20 +121,26 @@ class Simulator:
         ou até alcançar `tick_limit` de segurança para evitar loops.
         """
         print(f"Iniciando simulação com algoritmo: {self.algorithm_name}")
+        
+          
         while not self.all_tasks_completed() and self.time < self.tick_limit:
-            self.queue_changed = False  # Reseta flag a cada iteração
             self._check_arrivals()
-            if self.queue_changed or not self.running_task:
-                self._schedule()  
+            self._check_suspension_exits()  # Processa desbloqueios ANTES de rescalonar
+            if self.queue_changed or not self.running_task or self.needs_reschedule:
+                self._schedule()
+                self.needs_reschedule = False  # Consome o flag
             self._tick()
             
             # Envelhecimento: APÓS execução do tick, apenas se houve mudança na fila
             # (nova tarefa chegou ou preempção ocorreu)
+            # Obs: tarefas bloqueadas (IO ou mutex) NÃO recebem envelhecimento
             if self.queue_changed and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
                 for task in self.ready_queue:
-                    if task is not self.running_task and not task.completed:
+                    if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
             
+            # Reseta flag APÓS processar tudo (para não perder mudanças feitas em _tick)
+            self.queue_changed = False
             self.time += 1
         print("Simulação encerrada.")
         self.render_gantt_terminal(self.timeline, self.wait_map)
@@ -144,6 +154,7 @@ class Simulator:
         self.ready_queue = []
         self.running_task = None
         self.wait_map = {}
+        self.suspended_map = {}
         self.arrivals_map = {}
         self.finish_map = {}
         
@@ -224,18 +235,23 @@ class Simulator:
 
         self.queue_changed = False  # Reseta flag a cada iteração
         self._check_arrivals()
-        if self.queue_changed or not self.running_task:
-            self._schedule()  
+        self._check_suspension_exits()  # Processa desbloqueios ANTES de rescalonar
+        if self.queue_changed or not self.running_task or self.needs_reschedule:
+            self._schedule()
+            self.needs_reschedule = False  # Consome o flag
         self._tick()
             
             # Envelhecimento: APÓS execução do tick, apenas se houve mudança na fila
             # (nova tarefa chegou ou preempção ocorreu)
+            # Obs: tarefas bloqueadas (IO ou mutex) NÃO recebem envelhecimento
         if self.queue_changed and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
                 for task in self.ready_queue:
-                    if task is not self.running_task and not task.completed:
+                    if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
-            
         
+        # Reseta flag APÓS processar tudo
+        self.queue_changed = False
+            
         if self.debug_mode:
             snap = self.snapshot()
             print(f"[Tick {self.time}] EXEC: {snap['running']} | READY: {snap['ready_queue']} | QUANTUM={self.quantum}")
@@ -267,6 +283,43 @@ class Simulator:
                 self.queue_changed = True
                 task.dynamic_priority = task.static_priority
 
+    def _check_suspension_exits(self):
+        """Processa desbloqueios de IO e mutex ANTES de rescalonar.
+        
+        Decrementa contadores de suspensão para tarefas bloqueadas
+        e marca needs_reschedule = True quando desbloqueio completa.
+        Também incrementa elapsed_time das tarefas bloqueadas.
+        """
+        for task in list(self.ready_queue):
+            # Incrementa elapsed_time para tarefas bloqueadas
+            if task.io_blocked or task.blocked:
+                task.elapsed_time += 1
+            
+            # Se está bloqueada por IO
+            if task.io_blocked:
+                task.io_remaining -= 1
+                if task.io_remaining > 0:
+                    # Ainda está em IO, registra como suspenso
+                    self.suspended_map.setdefault(task.id, []).append(self.time)
+                if task.io_remaining <= 0:
+                    task.io_blocked = False
+                    task.io_remaining = 0
+                    self.needs_reschedule = True
+                    print(f"[PRE-TICK] Tarefa {task.id} desbloqueada de IO em t={self.time}")
+            
+            # Se está bloqueada por mutex
+            elif task.blocked:
+                # Verifica se o mutex foi liberado por outra tarefa em tick anterior
+                mutex = self.mutexes.get(task.blocking_mutex_id)
+                if mutex and not mutex.is_locked():
+                    task.blocked = False
+                    task.blocking_mutex_id = None
+                    self.needs_reschedule = True
+                    print(f"[PRE-TICK] Tarefa {task.id} desbloqueada de M{mutex.id} em t={self.time}")
+                else:
+                    # Registra ainda em suspensão
+                    self.suspended_map.setdefault(task.id, []).append(self.time)
+
     def _schedule(self):
         """Realiza escalonamento: escolhe próxima tarefa ou verifica preempção.
         SRTF/PRIOP: preemptivos, verificam a cada tick se deve trocar.
@@ -284,6 +337,10 @@ class Simulator:
                 self.running_task = self.scheduler(available)
             if self.running_task:
                 self.running_task.executed_count = 0
+                # CORREÇÃO: Só reseta elapsed_time se for a PRIMEIRA execução da tarefa
+                if self.running_task.elapsed_time == 0:
+                    pass  # elapsed_time já está em 0 na primeira vez
+                # Se elapsed_time != 0, mantém o valor (tarefa voltando do IO/mutex)
                 # Remove da fila pois agora está em execução
                 if self.running_task in self.ready_queue:
                     self.ready_queue.remove(self.running_task)
@@ -327,14 +384,6 @@ class Simulator:
         - Aplica lógica de término ou de expiração de quantum (SRTF/PRIOP)
         - Adiciona ID (ou None) à timeline para visualização
         """
-        # Processa IO para tarefas bloqueadas que ainda estão na ready_queue
-        # Também incrementa elapsed_time para contabilizar tempo de bloqueio
-        for task in list(self.ready_queue):
-            if task.io_blocked or task.blocked:
-                task.elapsed_time += 1
-                if task.io_blocked:
-                    self._process_io_events(task)
-        
         if self.running_task:
             # CRITÉRIO 3.6: Se tarefa está iniciando execução (elapsed_time==0),
             # processa eventos de t=0 ANTES de incrementar
@@ -373,15 +422,12 @@ class Simulator:
                 self.running_task.executed_ticks += 1
                 self.running_task.executed_count += 1
             else:
-                # Para execuções subsequentes, incrementa ANTES de processar
-                self.running_task.elapsed_time += 1
-                
-                # Processa eventos de IO
+                # Para execuções subsequentes, processa eventos ANTES de incrementar
+                # (eventos são relativos ao tempo atual de execução)
                 self._process_io_events(self.running_task)
                 
                 # Se tarefa ficou bloqueada por IO, não executa CPU este tick
                 if self.running_task.io_blocked:
-                    self.timeline.append(None)  # CPU ociosa por bloqueio de IO
                     # Readiciona tarefa à fila de prontos
                     if self.running_task not in self.ready_queue and not self.running_task.completed:
                         self.ready_queue.append(self.running_task)
@@ -390,6 +436,50 @@ class Simulator:
                         if not task.completed:
                             self.wait_map.setdefault(task.id, []).append(self.time)
                     self.running_task = None
+                    # Reschedule: escolher próxima tarefa disponível
+                    self._schedule()
+                    if not self.running_task:
+                        # Nenhuma tarefa - CPU ociosa
+                        self.timeline.append(None)
+                    else:
+                        # Nova tarefa foi alocada, processa como se fosse t=0
+                        self._process_io_events(self.running_task)
+                        if self.running_task.io_blocked:
+                            self.timeline.append(None)
+                            if self.running_task not in self.ready_queue and not self.running_task.completed:
+                                self.ready_queue.append(self.running_task)
+                            for task in self.ready_queue:
+                                if not task.completed:
+                                    self.wait_map.setdefault(task.id, []).append(self.time)
+                            self.running_task = None
+                            return
+                        
+                        self._process_mutex_events(self.running_task)
+                        if self.running_task.blocked:
+                            self.timeline.append(None)
+                            if self.running_task not in self.ready_queue and not self.running_task.completed:
+                                self.ready_queue.append(self.running_task)
+                            for task in self.ready_queue:
+                                if not task.completed:
+                                    self.wait_map.setdefault(task.id, []).append(self.time)
+                            self.running_task = None
+                            return
+                        
+                        # Executa CPU
+                        self.running_task.remaining_time -= 1
+                        self.running_task.executed_ticks += 1
+                        self.running_task.executed_count += 1
+                        
+                        # Incrementa elapsed_time APÓS processar t=0 e executar
+                        self.running_task.elapsed_time += 1
+                        
+                        # Adiciona à timeline
+                        task_id = self.running_task.id
+                        self.timeline.append(task_id)
+                        for task in self.ready_queue:
+                            if task is not self.running_task and not task.completed:
+                                self.wait_map.setdefault(task.id, []).append(self.time)
+                    # Se conseguiu, deixa continuar para executar
                     return
                 
                 # Executa a tarefa (decrementa remaining_time)
@@ -402,7 +492,6 @@ class Simulator:
                 
                 # Se tarefa ficou bloqueada por mutex, não continua
                 if self.running_task.blocked:
-                    self.timeline.append(None)  # CPU ociosa por bloqueio de mutex
                     # Readiciona tarefa à fila de prontos
                     if self.running_task not in self.ready_queue and not self.running_task.completed:
                         self.ready_queue.append(self.running_task)
@@ -411,7 +500,16 @@ class Simulator:
                         if not task.completed:
                             self.wait_map.setdefault(task.id, []).append(self.time)
                     self.running_task = None
+                    # Reschedule: escolher próxima tarefa disponível
+                    self._schedule()
+                    if not self.running_task:
+                        # Nenhuma tarefa - CPU ociosa
+                        self.timeline.append(None)
+                    # Se conseguiu, deixa continuar para executar
                     return
+                
+                # Incrementa elapsed_time APÓS processar eventos e executar CPU
+                self.running_task.elapsed_time += 1
             
             # Adiciona ID à timeline, com marcação se foi sorteio
             task_id = self.running_task.id
@@ -449,31 +547,11 @@ class Simulator:
     def _process_io_events(self, task):
         """Processa eventos de IO para uma tarefa em execução.
         
-        Critério 3.4: Uma ação de E/S dura yy ticks. Quando termina, gera IRQ
-        no instante imediatamente depois do término.
+        Critério 3.3: Tempo relativo (elapsed_time) ao início determina qual evento disparar.
+        Inicia novo IO bloqueando a tarefa.
         
-        Tempo relativo (elapsed_time) determina qual evento disparar.
-        Quando IO é iniciado:
-        - Marca tarefa como io_blocked=True
-        - Inicia contador io_remaining com duração da operação
-        
-        Cada tick enquanto io_bloqueada:
-        - Decrementa io_remaining
-        - Quando io_remaining==0, desbloqueia tarefa e gera IRQ
+        Nota: Desbloqueio é processado em _check_suspension_exits() antes de rescalonar.
         """
-        # Se tarefa já está bloqueada por IO, decrementa contador
-        if task.io_blocked:
-            task.io_remaining -= 1
-            if task.io_remaining <= 0:
-                task.io_blocked = False
-                task.io_remaining = 0
-                # CRITÉRIO 3.4: IRQ gerada no instante imediatamente depois do término
-                print(f"[IRQ] Tarefa {task.id} completou IO - interrupção gerada em t={self.time}")
-                # Readiciona à fila se não estiver lá
-                if task not in self.ready_queue and not task.completed:
-                    self.ready_queue.append(task)
-            return
-        
         # Procura por IO events que começam neste tempo relativo
         # CRITÉRIO 3.3: Tempo relativo ao início da tarefa
         pending_io = task.get_pending_io(task.elapsed_time)
@@ -481,6 +559,8 @@ class Simulator:
             # Inicia novo IO
             task.io_blocked = True
             task.io_remaining = pending_io["duration"]
+            # Registra suspensão
+            self.suspended_map.setdefault(task.id, []).append(self.time)
             # CRITÉRIO 3.2: Formato IO:xx-yy onde yy é duração
             print(f"[IO START] Tarefa {task.id} iniciando E/S (duração={pending_io['duration']} ticks) em t={self.time}")
 
@@ -491,7 +571,7 @@ class Simulator:
         
         Tempo relativo (elapsed_time) determina qual evento disparar.
         Lock: tenta adquirir; se falhar, marca tarefa como bloqueada.
-        Unlock: libera o mutex e promove próxima tarefa em espera.
+        Unlock: libera o mutex (desbloqueio é processado em _check_suspension_exits).
         """
         events = task.get_pending_events(task.elapsed_time)
         
@@ -506,6 +586,8 @@ class Simulator:
                         # Lock falhou: tarefa fica bloqueada
                         task.blocked = True
                         task.blocking_mutex_id = mutex_id
+                        # Registra suspensão
+                        self.suspended_map.setdefault(task.id, []).append(self.time)
                         print(f"Tarefa {task.id} bloqueada aguardando M{mutex_id}")
             
             elif event_type == "unlock":
@@ -513,17 +595,7 @@ class Simulator:
                 if mutex:
                     next_task_id = mutex.unlock(task.id)
                     print(f"Tarefa {task.id} liberou M{mutex_id}")
-                    
-                    # Se há tarefa esperando, desbloqueia
-                    if next_task_id:
-                        for t in self.tasks:
-                            if t.id == next_task_id:
-                                t.blocked = False
-                                t.blocking_mutex_id = None
-                                # Readiciona à fila se não estiver lá
-                                if t not in self.ready_queue and not t.completed:
-                                    self.ready_queue.append(t)
-                                print(f"Tarefa {next_task_id} desbloqueada em M{mutex_id}")
+                    # Desbloqueio da próxima tarefa será processado em _check_suspension_exits()
 
 
     def all_tasks_completed(self):
