@@ -69,7 +69,7 @@ def priority_preemptive_aging_scheduler(ready_queue, current=None):
             delattr(best, '_tie_break_random')
     return best
 
-def _priopenv_should_preempt(current, candidate):
+def _PRIOPEnv_should_preempt(current, candidate):
     if not current or not candidate:
         return False
     c_pd = getattr(candidate, 'dynamic_priority', getattr(candidate, 'priority', 0))
@@ -83,7 +83,7 @@ def _priopenv_should_preempt(current, candidate):
     # preferir manter a atual
     return False
 
-priority_preemptive_aging_scheduler.should_preempt = _priopenv_should_preempt
+priority_preemptive_aging_scheduler.should_preempt = _PRIOPEnv_should_preempt
 
 def get_scheduler(algorithm):
     """Mapeia string de algoritmo para função correspondente.
@@ -97,7 +97,7 @@ def get_scheduler(algorithm):
         return srtf_scheduler
     elif algorithm.upper() == "PRIOP":
         return priority_preemptive_scheduler
-    elif algorithm.upper() == "PRIOPENV":
+    elif algorithm.upper() == "PRIOPEnv":
         return priority_preemptive_aging_scheduler
     else:
         raise ValueError(f"Algoritmo desconhecido: {algorithm}")

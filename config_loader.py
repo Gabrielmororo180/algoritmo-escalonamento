@@ -205,7 +205,7 @@ def load_config(filename):
 
     # Alpha para PRIOPEnv (preemptivo com envelhecimento)
     alpha = 0
-    if algorithm.upper() == "PRIOPENV":
+    if algorithm.upper() == "PRIOPEnv":
         try:
             alpha = int(header[2]) if len(header) > 2 and header[2] else 0
         except ValueError:

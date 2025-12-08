@@ -39,7 +39,7 @@ class TaskEditorApp:
         self.debug_current_index = -1  
 
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
-        self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP", "PRIOPENV"], state="readonly", width=18)
+        self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP", "PRIOPEnv"], state="readonly", width=18)
         self.algorithm_cb.grid(row=0, column=1, pady=2)
         self.algorithm_cb.set("FIFO")
 

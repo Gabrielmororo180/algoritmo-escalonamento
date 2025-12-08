@@ -131,7 +131,7 @@ class Simulator:
                 
             self._tick()
               
-            if (self.needs_reschedule  or self.queue_changed) and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
+            if (self.needs_reschedule  or self.queue_changed) and self.algorithm_name.upper() == "PRIOPEnv" and self.alpha > 0:
                 for task in self.ready_queue:
                     if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
@@ -200,7 +200,7 @@ class Simulator:
                 "duration": t.duration,
                 "remaining": t.remaining_time,
                 "priority": t.priority,
-                "dynamic_priority": getattr(t, 'dynamic_priority', t.priority),  # Para PRIOPENV
+                "dynamic_priority": getattr(t, 'dynamic_priority', t.priority),  # Para PRIOPEnv
                 "completed": t.completed,
                 "executed_ticks": t.executed_ticks,
                 "elapsed_time": t.elapsed_time,
@@ -242,7 +242,7 @@ class Simulator:
         self._tick()
             
             # (nova tarefa chegou ou preempção ocorreu)
-        if (self.needs_reschedule or self.queue_changed) and self.algorithm_name.upper() == "PRIOPENV" and self.alpha > 0:
+        if (self.needs_reschedule or self.queue_changed) and self.algorithm_name.upper() == "PRIOPEnv" and self.alpha > 0:
                 for task in self.ready_queue:
                     if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
@@ -347,7 +347,7 @@ class Simulator:
            
             available = [t for t in self.ready_queue if not t.blocked and not t.io_blocked]
         
-            if self.algorithm_name.upper() == "PRIOPENV":
+            if self.algorithm_name.upper() == "PRIOPEnv":
                 self.running_task = self.scheduler(available, current=self.running_task)
             else:
                 self.running_task = self.scheduler(available)
@@ -360,7 +360,7 @@ class Simulator:
                     self.ready_queue.remove(self.running_task)
                 
                 
-                if self.algorithm_name.upper() == "PRIOPENV":
+                if self.algorithm_name.upper() == "PRIOPEnv":
                     self.running_task.dynamic_priority = self.running_task.static_priority
             self.queue_changed = True        
             return
@@ -369,7 +369,7 @@ class Simulator:
         if hasattr(self.scheduler, 'should_preempt'):
             available = [t for t in self.ready_queue if not t.blocked and not t.io_blocked]
         
-            if self.algorithm_name.upper() == "PRIOPENV":
+            if self.algorithm_name.upper() == "PRIOPEnv":
                 candidate = self.scheduler(available, current=self.running_task)
             else:
                 candidate = self.scheduler(available)
@@ -385,7 +385,7 @@ class Simulator:
                     candidate.executed_count = 0    
                     self.running_task = candidate
                     
-                    if self.algorithm_name.upper() == "PRIOPENV":
+                    if self.algorithm_name.upper() == "PRIOPEnv":
                         self.running_task.dynamic_priority = self.running_task.static_priority
                     
 
