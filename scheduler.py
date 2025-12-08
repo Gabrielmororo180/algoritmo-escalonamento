@@ -53,22 +53,22 @@ def priority_preemptive_aging_scheduler(ready_queue, current=None):
         pd = getattr(t, 'dynamic_priority', getattr(t, 'priority', 0))
         pe = getattr(t, 'static_priority', getattr(t, 'priority', 0))
         is_current = 1 if (current is not None and t is current) else 0
-        arrival = -getattr(t, 'arrival', 0)  # negativo para max favorecer menor arrival
-        duration = -getattr(t, 'duration', 0)  # negativo para max favorecer menor duração
+        arrival = -getattr(t, 'arrival', 0) 
+        duration = -getattr(t, 'duration', 0)  
         return (pd, pe, is_current, arrival, duration)  # ORDEM: pd > pe > is_current > arrival > duration
 
-    # Em caso de empate completo, sorteia entre empatados e indica via atributo
+    
     best = max(ready_queue, key=sort_key, default=None)
     top_key = sort_key(best)
     tied = [t for t in ready_queue if sort_key(t) == top_key]
     if len(tied) > 1:
-        # sorteio
         best = random.choice(tied)
         setattr(best, '_tie_break_random', True)
     else:
         if hasattr(best, '_tie_break_random'):
             delattr(best, '_tie_break_random')
     return best
+
 def _priopenv_should_preempt(current, candidate):
     if not current or not candidate:
         return False
@@ -98,7 +98,6 @@ def get_scheduler(algorithm):
     elif algorithm.upper() == "PRIOP":
         return priority_preemptive_scheduler
     elif algorithm.upper() == "PRIOPENV":
-        # O simulador chamará passando a tarefa atual quando disponível.
         return priority_preemptive_aging_scheduler
     else:
         raise ValueError(f"Algoritmo desconhecido: {algorithm}")

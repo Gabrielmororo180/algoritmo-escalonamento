@@ -136,6 +136,7 @@ class Simulator:
                     if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
             
+            self._handle_task_state_changes()
            
             self.queue_changed = False
             self.needs_reschedule = False 
@@ -246,6 +247,7 @@ class Simulator:
                     if task is not self.running_task and not task.completed and not task.blocked and not task.io_blocked:
                         task.dynamic_priority += self.alpha
         
+        self._handle_task_state_changes()
        
         self.queue_changed = False
         self.needs_reschedule = False
@@ -303,6 +305,34 @@ class Simulator:
             elif task.blocked:
                 task.elapsed_time += 1
                 self.suspended_map.setdefault(task.id, []).append(self.time)
+
+    def _handle_task_state_changes(self):
+        """Processa mudanças de estado da tarefa após envelhecimento:
+        - Verifica se tarefa completou
+        - Verifica se expirou quantum
+        
+        Executa APÓS envelhecimento para permitir que tarefas se beneficiem
+        da elevação de prioridade antes de serem preemptadas.
+        """
+        if not self.running_task:
+            return
+        
+        # Verifica conclusão
+        if self.running_task.remaining_time <= 0:
+            self.running_task.completed = True
+            print(f"Tarefa {self.running_task.id} concluída em t={self.time}")
+            self.finish_map[self.running_task.id] = self.time + 1
+            self.running_task = None
+            self.needs_reschedule = True
+            return
+        
+        # Verifica expiração de quantum
+        if self.running_task.executed_count >= self.quantum:
+            print(f"Tarefa {self.running_task.id} preemptada por quantum em t={self.time}")
+            self.ready_queue.append(self.running_task)
+            self.running_task.executed_count = 0
+            self.running_task = None
+            self.needs_reschedule = True
 
 
 
@@ -505,21 +535,6 @@ class Simulator:
             for task in self.ready_queue:
                 if task is not self.running_task and not task.completed:
                     self.wait_map.setdefault(task.id, []).append(self.time)
-
-            if self.running_task.remaining_time <= 0:
-                self.running_task.completed = True
-               
-                print(f"Tarefa {self.running_task.id} concluída em t={self.time}")
-                self.finish_map[self.running_task.id] = self.time + 1 
-                self.running_task = None
-
-            elif self.running_task.executed_count >= self.quantum:
-              
-                print(f"Tarefa {self.running_task.id} preemptada por quantum em t={self.time}")
-                # Rotaciona tarefa e deixa a "CPU" livre
-                self.ready_queue.append(self.running_task)
-                self.running_task.executed_count = 0
-                self.running_task = None
         else:
             # CPU ociosa
             self.timeline.append(None)
