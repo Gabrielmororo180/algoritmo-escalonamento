@@ -53,10 +53,7 @@ def parse_task_line(line):
     duration = parts[3]
     priority = parts[4]
     
-    # Eventos são todos os campos depois do 5º, separados por ";"
-    # Junta novamente com "," para que parse_task_line possa processar
     events = ",".join(parts[5:]) if len(parts) > 5 else ""
-    # Aplicar defaults e conversões seguras
     def to_int(val, default):
         try:
             return int(val)

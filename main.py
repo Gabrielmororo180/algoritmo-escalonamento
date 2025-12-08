@@ -21,7 +21,6 @@ import sys
 
 
 def build_parser():
-    #Constrói e retorna parser de argumentos.
     p = argparse.ArgumentParser(description="Simulador de escalonamento de tarefas")
     p.add_argument("algorithm", nargs="?", help="Algoritmo (FIFO, SRTF PRIOP)")
     p.add_argument("config", nargs="?", help="Caminho do arquivo de configuração", default="sample_config.txt")
@@ -44,7 +43,6 @@ def apply_overrides(cfg, args):
     return cfg
 
 def main(argv=None):
-    #Executa fluxo completo da CLI.
     argv = argv or sys.argv[1:]
     parser = build_parser()
     args = parser.parse_args(argv)

@@ -34,9 +34,9 @@ class TaskEditorApp:
         self.tasks = []          
         self.task_counter = 1
         
-        # Histórico de eventos para navegação
-        self.debug_history = []  # Lista de snapshots calculados
-        self.debug_current_index = -1  # Índice atual na história    
+        
+        self.debug_history = []  
+        self.debug_current_index = -1  
 
         tk.Label(root, text="Algoritmo").grid(row=0, column=0, sticky="e")
         self.algorithm_cb = ttk.Combobox(root, values=["FIFO", "SRTF", "PRIOP", "PRIOPENV"], state="readonly", width=18)
@@ -58,11 +58,11 @@ class TaskEditorApp:
         
         tk.Label(root, text="Cor (Hex)").grid(row=1, column=0, sticky="e")
         
-        # Frame para cor com combobox e preview
+       
         cor_frame = tk.Frame(root)
         cor_frame.grid(row=1, column=1, pady=2, columnspan=3, sticky="w")
         
-        # Cores predefinidas em hexadecimal
+       
         self.color_options = {
             "Vermelho": "#FF0000",
             "Verde": "#00FF00",
@@ -89,7 +89,7 @@ class TaskEditorApp:
         self.fields["cor"].set("Vermelho")
         self.fields["cor"].bind("<<ComboboxSelected>>", self.update_color_preview)
         
-      
+        # Preview da cor
         self.color_preview = tk.Canvas(cor_frame, width=30, height=30, bg="#FF0000", relief="solid", borderwidth=1)
         self.color_preview.pack(side=tk.LEFT, padx=5)
 
@@ -99,21 +99,21 @@ class TaskEditorApp:
             entry.grid(row=i+2, column=1, pady=2, columnspan=3, sticky="w")
             self.fields[label.lower()] = entry
 
-        
+        # Campo de eventos (mutex)
         tk.Label(root, text="Eventos").grid(row=5, column=0, sticky="ne")
         eventos_entry = tk.Entry(root, width=20)
         eventos_entry.grid(row=5, column=1, pady=2, columnspan=3, sticky="w")
         self.fields["eventos"] = eventos_entry
         tk.Label(root, text="(ex: ML1:2,MU1:5)", font=('Arial', 8), fg='gray').grid(row=5, column=4, sticky="w")
 
-       
+        # Campo de eventos de IO
         tk.Label(root, text="IO Eventos").grid(row=6, column=0, sticky="ne")
         io_eventos_entry = tk.Entry(root, width=20)
         io_eventos_entry.grid(row=6, column=1, pady=2, columnspan=3, sticky="w")
         self.fields["io_eventos"] = io_eventos_entry
         tk.Label(root, text="(ex: IO2-5,IO10-3)", font=('Arial', 8), fg='gray').grid(row=6, column=4, sticky="w")
 
-       
+        # Frame único para todos os botões em uma linha
         buttons_frame = tk.Frame(root)
         buttons_frame.grid(row=7, column=0, columnspan=5, sticky='w', pady=8)
 

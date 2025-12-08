@@ -48,9 +48,7 @@ def priority_preemptive_aging_scheduler(ready_queue, current=None):
     if not ready_queue:
         return None
 
-    # Ordenação multi-critério; para critério 2, se 'current' presente, favorece
     import random
-    # Preparar chave de ordenação; como max, usamos tupla
     def sort_key(t):
         pd = getattr(t, 'dynamic_priority', getattr(t, 'priority', 0))
         pe = getattr(t, 'static_priority', getattr(t, 'priority', 0))
@@ -61,20 +59,16 @@ def priority_preemptive_aging_scheduler(ready_queue, current=None):
 
     # Em caso de empate completo, sorteia entre empatados e indica via atributo
     best = max(ready_queue, key=sort_key, default=None)
-    # Verifica se há empate com outras tarefas pelo sort_key
     top_key = sort_key(best)
     tied = [t for t in ready_queue if sort_key(t) == top_key]
     if len(tied) > 1:
         # sorteio
         best = random.choice(tied)
-        # marca atributo para o simulador poder indicar no gantt se desejar
         setattr(best, '_tie_break_random', True)
     else:
-        # limpa flag se existir
         if hasattr(best, '_tie_break_random'):
             delattr(best, '_tie_break_random')
     return best
-# should_preempt para PRIOPEnv: preempção se candidato tem pd maior, aplicando desempates
 def _priopenv_should_preempt(current, candidate):
     if not current or not candidate:
         return False
@@ -82,7 +76,6 @@ def _priopenv_should_preempt(current, candidate):
     cur_pd = getattr(current, 'dynamic_priority', getattr(current, 'priority', 0))
     if c_pd != cur_pd:
         return c_pd > cur_pd
-    # desempates
     c_pe = getattr(candidate, 'static_priority', getattr(candidate, 'priority', 0))
     cur_pe = getattr(current, 'static_priority', getattr(current, 'priority', 0))
     if c_pe != cur_pe:
@@ -105,7 +98,6 @@ def get_scheduler(algorithm):
     elif algorithm.upper() == "PRIOP":
         return priority_preemptive_scheduler
     elif algorithm.upper() == "PRIOPENV":
-        # Para PRIOPEnv, retornamos uma função wrapper que aceita (ready_queue, current)
         # O simulador chamará passando a tarefa atual quando disponível.
         return priority_preemptive_aging_scheduler
     else:

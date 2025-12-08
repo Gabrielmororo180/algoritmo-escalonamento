@@ -35,10 +35,8 @@ class TaskControlBlock:
         self.static_priority = priority
         self.dynamic_priority = priority
         
-        # Eventos de mutex: lista de {type, mutex_id, time}
         self.events = events if events else []
         
-        # Eventos de IO: lista de {type: "io", time, duration}
         self.io_events = io_events if io_events else []
         
         # Estado de execução
@@ -55,10 +53,8 @@ class TaskControlBlock:
         self.io_blocked = False
         self.io_remaining = 0  # tempo restante na operação de IO
         
-        # Tempo relativo desde que começou a executar (para rastrear eventos)
         self.elapsed_time = 0
         
-        # Marcar se foi escolhida por sorteio (para Gantt)
         self.chosen_by_lottery = False
     
     def get_pending_events(self, current_time):

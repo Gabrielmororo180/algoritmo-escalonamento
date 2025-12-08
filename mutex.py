@@ -43,7 +43,6 @@ class Mutex:
             self.owner_id = task_id
             return True
         else:
-            # Mutex ocupado - adiciona à fila de espera
             if task_id not in self.waiting_queue:
                 self.waiting_queue.append(task_id)
             return False
